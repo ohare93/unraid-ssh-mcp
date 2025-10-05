@@ -1,0 +1,7 @@
+{
+  "packages": ["nodejs@latest"],
+  "shell": {
+    "init_hook": [],
+    "scripts":   {}
+  }
+}

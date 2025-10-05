@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  mcp-ssh-unraid-http:
+    build:
+      context: .
+      dockerfile: Dockerfile.http
+    image: mcp-ssh-unraid-http:latest
+    container_name: mcp-ssh-unraid-http
+    restart: unless-stopped
+
+    # Environment variables - configure these or use .env file
+    environment:
+      # When running ON the Unraid server itself, use localhost
+      # When running remotely, use the Unraid server's hostname/IP
+      - SSH_HOST=${SSH_HOST:-localhost}
+      - SSH_PORT=${SSH_PORT:-22}
+      - SSH_USERNAME=${SSH_USERNAME:-mcp-readonly}
+      - SSH_PRIVATE_KEY_PATH=/home/mcp/.ssh/id_rsa
+      - NODE_ENV=production
+      - HTTP_PORT=${HTTP_PORT:-3000}
+      # Optional: Configure CORS origin (default: *)
+      # - CORS_ORIGIN=https://yourdomain.com
+
+    # Volume mounts
+    volumes:
+      # Mount your SSH private key (read-only)
+      # For Unraid: Use the full path to your SSH key
+      # Example: /root/.ssh/id_rsa_mcp or /boot/config/ssh/id_rsa_mcp
+      # :z flag allows podman to relabel the file for container access
+      - ${SSH_KEY_HOST_PATH:-/root/.ssh/id_rsa_mcp}:/home/mcp/.ssh/id_rsa:ro,z
+
+    # Port mapping - expose HTTP endpoint
+    ports:
+      - "${HTTP_PORT:-3000}:3000"
+
+    # Network mode - REQUIRED when running on Unraid server itself
+    # This allows the container to access localhost:22 (SSH on the host)
+    # Comment out if running remotely and use bridge network instead
+    # network_mode: host
+    # NOTE: If using host network mode, the port mapping above is ignored
+    #       and the service will be available on the host's port 3000
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    # Resource limits (optional)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1'
+    #       memory: 512M
+    #     reservations:
+    #       cpus: '0.25'
+    #       memory: 128M
+
+  # Alternative configuration for remote deployment (not on Unraid itself)
+  # Uncomment this service and comment out the one above if deploying remotely
+  # mcp-ssh-unraid-http-remote:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.http
+  #   image: mcp-ssh-unraid-http:latest
+  #   container_name: mcp-ssh-unraid-http
+  #   restart: unless-stopped
+  #   environment:
+  #     - SSH_HOST=${SSH_HOST:-unraid.local}
+  #     - SSH_PORT=${SSH_PORT:-22}
+  #     - SSH_USERNAME=${SSH_USERNAME:-mcp-readonly}
+  #     - SSH_PRIVATE_KEY_PATH=/home/mcp/.ssh/id_rsa
+  #     - NODE_ENV=production
+  #     - HTTP_PORT=${HTTP_PORT:-3000}
+  #   volumes:
+  #     - ${SSH_KEY_HOST_PATH:-~/.ssh/id_rsa_mcp}:/home/mcp/.ssh/id_rsa:ro
+  #   ports:
+  #     - "${HTTP_PORT:-3000}:3000"
+  #   security_opt:
+  #     - no-new-privileges:true
+  #   read_only: true
+  #   tmpfs:
+  #     - /tmp
