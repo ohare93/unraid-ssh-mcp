@@ -25,13 +25,14 @@ describe('Docker Advanced Tools', () => {
   });
 
   describe('Tool Registration', () => {
-    it('should register all 5 advanced Docker tools', () => {
-      expect(mockServer.tool).toHaveBeenCalledTimes(5);
+    it('should register all 6 advanced Docker tools', () => {
+      expect(mockServer.tool).toHaveBeenCalledTimes(6);
       expect(registeredTools.has('docker container env')).toBe(true);
       expect(registeredTools.has('docker top')).toBe(true);
       expect(registeredTools.has('docker health check all')).toBe(true);
       expect(registeredTools.has('docker logs aggregate')).toBe(true);
       expect(registeredTools.has('docker compose ps')).toBe(true);
+      expect(registeredTools.has('docker compose up')).toBe(true);
     });
   });
 
@@ -352,6 +353,116 @@ root                9999                0                   0                   
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Error checking compose stack');
       expect(result.content[0].text).toContain('Docker compose not installed');
+    });
+  });
+
+  describe('docker compose up', () => {
+    it('should start a compose stack successfully', async () => {
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // directory check
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // file check
+      mockSSHExecutor.mockResolvedValueOnce('[+] Running 3/3\n ✔ Network myapp_default  Created\n ✔ Container myapp-db-1   Started\n ✔ Container myapp-web-1  Started'); // compose up
+
+      const tool = registeredTools.get('docker compose up');
+      const result = await tool.handler({ path: '/opt/stacks/myapp' });
+
+      expect(mockSSHExecutor).toHaveBeenCalledWith('test -d /opt/stacks/myapp && echo "exists" || echo "not found"');
+      expect(mockSSHExecutor).toHaveBeenCalledWith('test -f /opt/stacks/myapp/docker-compose.yml && echo "exists" || echo "not found"');
+      expect(mockSSHExecutor).toHaveBeenCalledWith('cd /opt/stacks/myapp && docker compose -f docker-compose.yml up -d');
+
+      expect(result.content[0].text).toContain('Docker Compose Up - /opt/stacks/myapp');
+      expect(result.content[0].text).toContain('Running 3/3');
+      expect(result.content[0].text).toContain('myapp-web-1');
+    });
+
+    it('should use custom compose file name', async () => {
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // directory check
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // file check
+      mockSSHExecutor.mockResolvedValueOnce('Stack started'); // compose up
+
+      const tool = registeredTools.get('docker compose up');
+      const result = await tool.handler({ path: '/opt/app', composeFile: 'custom-compose.yml' });
+
+      expect(mockSSHExecutor).toHaveBeenCalledWith('test -f /opt/app/custom-compose.yml && echo "exists" || echo "not found"');
+      expect(mockSSHExecutor).toHaveBeenCalledWith('cd /opt/app && docker compose -f custom-compose.yml up -d');
+    });
+
+    it('should handle non-existent directory', async () => {
+      mockSSHExecutor.mockResolvedValue('not found');
+
+      const tool = registeredTools.get('docker compose up');
+      const result = await tool.handler({ path: '/nonexistent/path' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Directory not found: /nonexistent/path');
+    });
+
+    it('should handle non-existent compose file', async () => {
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // directory exists
+      mockSSHExecutor.mockResolvedValueOnce('not found'); // file doesn't exist
+
+      const tool = registeredTools.get('docker compose up');
+      const result = await tool.handler({ path: '/opt/app' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Compose file not found: /opt/app/docker-compose.yml');
+    });
+
+    it('should handle empty output from compose up', async () => {
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // directory check
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // file check
+      mockSSHExecutor.mockResolvedValueOnce(''); // compose up - empty output
+
+      const tool = registeredTools.get('docker compose up');
+      const result = await tool.handler({ path: '/opt/stack' });
+
+      expect(result.content[0].text).toContain('Stack started successfully');
+    });
+
+    it('should handle errors from docker compose', async () => {
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // directory check
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // file check
+      mockSSHExecutor.mockRejectedValueOnce(new Error('Error response from daemon: port is already allocated'));
+
+      const tool = registeredTools.get('docker compose up');
+      const result = await tool.handler({ path: '/opt/app' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error starting compose stack');
+      expect(result.content[0].text).toContain('port is already allocated');
+    });
+
+    it('should run in detached mode by default', async () => {
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // directory check
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // file check
+      mockSSHExecutor.mockResolvedValueOnce('Stack started'); // compose up
+
+      const tool = registeredTools.get('docker compose up');
+      await tool.handler({ path: '/opt/app' });
+
+      expect(mockSSHExecutor).toHaveBeenCalledWith('cd /opt/app && docker compose -f docker-compose.yml up -d');
+    });
+
+    it('should run in detached mode when explicitly set to true', async () => {
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // directory check
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // file check
+      mockSSHExecutor.mockResolvedValueOnce('Stack started'); // compose up
+
+      const tool = registeredTools.get('docker compose up');
+      await tool.handler({ path: '/opt/app', detached: true });
+
+      expect(mockSSHExecutor).toHaveBeenCalledWith('cd /opt/app && docker compose -f docker-compose.yml up -d');
+    });
+
+    it('should run in foreground mode when detached is false', async () => {
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // directory check
+      mockSSHExecutor.mockResolvedValueOnce('exists'); // file check
+      mockSSHExecutor.mockResolvedValueOnce('Attaching to container logs...'); // compose up
+
+      const tool = registeredTools.get('docker compose up');
+      const result = await tool.handler({ path: '/opt/app', detached: false });
+
+      expect(mockSSHExecutor).toHaveBeenCalledWith('cd /opt/app && docker compose -f docker-compose.yml up');
+      expect(result.content[0].text).toContain('Attaching to container logs');
     });
   });
 });

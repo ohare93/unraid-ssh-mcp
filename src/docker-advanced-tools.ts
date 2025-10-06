@@ -358,4 +358,86 @@ export function registerDockerAdvancedTools(
       }
     }
   );
+
+  // Tool 6: docker compose up - Start a docker compose stack
+  server.tool(
+    "docker compose up",
+    "Start a Docker Compose stack. Takes a directory path and runs 'docker compose up'. Optionally specify detached mode (default: true) and custom compose file name.",
+    {
+      path: z.string().describe("Directory path containing the docker-compose.yml file"),
+      composeFile: z
+        .string()
+        .optional()
+        .default("docker-compose.yml")
+        .describe("Optional compose file name (default: docker-compose.yml)"),
+      detached: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("Run in detached mode (default: true). Set to false to run in foreground."),
+    },
+    async (args) => {
+      try {
+        const composeFile = args.composeFile ?? "docker-compose.yml";
+        const detached = args.detached ?? true;
+
+        // Check if the directory exists
+        const dirCheckCommand = `test -d ${args.path} && echo "exists" || echo "not found"`;
+        const dirCheckResult = await sshExecutor(dirCheckCommand);
+
+        if (dirCheckResult.trim() !== "exists") {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Directory not found: ${args.path}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Check if the compose file exists in that directory
+        const composeFilePath = `${args.path}/${composeFile}`;
+        const fileCheckCommand = `test -f ${composeFilePath} && echo "exists" || echo "not found"`;
+        const fileCheckResult = await sshExecutor(fileCheckCommand);
+
+        if (fileCheckResult.trim() !== "exists") {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Compose file not found: ${composeFilePath}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Run docker compose up with or without -d flag
+        const detachedFlag = detached ? " -d" : "";
+        const upCommand = `cd ${args.path} && docker compose -f ${composeFile} up${detachedFlag}`;
+        const output = await sshExecutor(upCommand);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Docker Compose Up - ${args.path}\n\n${output.trim() || "Stack started successfully"}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error starting compose stack: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
 }
