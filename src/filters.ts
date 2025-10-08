@@ -39,13 +39,44 @@ export interface OutputFilters {
  * ```
  */
 export const outputFiltersSchema = z.object({
-  grep: z.string().optional().describe("Pattern to search for in output (grep)"),
-  grepCaseSensitive: z.boolean().optional().default(false).describe("Whether grep should be case-sensitive (default: false)"),
-  head: z.number().int().positive().optional().describe("Get only the first N lines of output"),
-  tail: z.number().int().positive().optional().describe("Get only the last N lines of output"),
-  sort: z.union([z.boolean(), z.literal('reverse')]).optional().describe("Sort output lines. Use 'reverse' for descending sort"),
-  uniq: z.boolean().optional().describe("Remove consecutive duplicate lines"),
-  wc: z.enum(['lines', 'words', 'chars']).optional().describe("Count lines, words, or characters instead of returning content"),
+  grep: z.string().optional().describe(
+    "Pattern to search for in output (grep). " +
+    "RECOMMENDED: Use filters to reduce output size and minimize context usage. " +
+    "Case-insensitive by default unless grepCaseSensitive=true. " +
+    "Example: grep='error' to find only error messages. " +
+    "Combine with head/tail for best results."
+  ),
+  grepCaseSensitive: z.boolean().optional().default(false).describe(
+    "Whether grep should be case-sensitive (default: false). " +
+    "Set to true for exact case matching."
+  ),
+  head: z.number().int().positive().optional().describe(
+    "Get only the first N lines of output (mutually exclusive with tail). " +
+    "BEST PRACTICE: Always use head or tail to limit output and reduce context. " +
+    "Example: head=20 to see first 20 results. " +
+    "Combine with grep to filter first, then limit."
+  ),
+  tail: z.number().int().positive().optional().describe(
+    "Get only the last N lines of output (mutually exclusive with head). " +
+    "BEST PRACTICE: Always use head or tail to limit output and reduce context. " +
+    "Example: tail=50 for recent log entries. " +
+    "Combine with grep to filter first, then show last N matches."
+  ),
+  sort: z.union([z.boolean(), z.literal('reverse')]).optional().describe(
+    "Sort output lines alphabetically. Use 'reverse' for descending sort, true for ascending. " +
+    "Useful for organizing results before limiting with head/tail. " +
+    "Example: sort='reverse' + head=10 for top 10 alphabetically."
+  ),
+  uniq: z.boolean().optional().describe(
+    "Remove consecutive duplicate lines (like uniq command). " +
+    "Use with sort=true to remove all duplicates. " +
+    "Reduces redundant output and context size."
+  ),
+  wc: z.enum(['lines', 'words', 'chars']).optional().describe(
+    "Count lines, words, or characters instead of returning full content. " +
+    "CONTEXT OPTIMIZATION: Use wc='lines' when you only need to know 'how many'. " +
+    "Example: wc='lines' with grep='running' counts running containers without showing them all."
+  ),
 });
 
 /**
