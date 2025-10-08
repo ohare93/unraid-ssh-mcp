@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { applyFilters, outputFiltersSchema } from "./filters.js";
 
 /**
  * SSH executor function type that executes commands on remote host
@@ -123,11 +124,14 @@ export function registerContainerTopologyTools(
   // Tool 1: container network topology - Network connectivity map
   server.tool(
     "container network topology",
-    "Analyze container network topology. Shows which containers are on which networks, their IP addresses, and network connectivity map.",
-    {},
-    async () => {
+    "Analyze container network topology. Shows which containers are on which networks, their IP addresses, and network connectivity map. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
-        const command = "docker inspect $(docker ps -q)";
+        let command = "docker inspect $(docker ps -q)";
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         if (!output.trim()) {
@@ -211,11 +215,14 @@ export function registerContainerTopologyTools(
   // Tool 2: container volume sharing - Shared volumes analysis
   server.tool(
     "container volume sharing",
-    "Analyze shared volumes between containers. Shows which containers share which volumes.",
-    {},
-    async () => {
+    "Analyze shared volumes between containers. Shows which containers share which volumes. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
-        const command = "docker inspect $(docker ps -aq)";
+        let command = "docker inspect $(docker ps -aq)";
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         if (!output.trim()) {
@@ -304,13 +311,15 @@ export function registerContainerTopologyTools(
   // Tool 3: container dependency graph - Dependency relationships
   server.tool(
     "container dependency graph",
-    "Analyze container dependency relationships. Shows depends_on, links, and network_mode: container: relationships. Optionally filter by specific container.",
+    "Analyze container dependency relationships. Shows depends_on, links, and network_mode: container: relationships. Optionally filter by specific container. Supports comprehensive output filtering.",
     {
       container: z.string().optional().describe("Container name or ID to focus on (optional)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
-        const command = "docker inspect $(docker ps -aq)";
+        let command = "docker inspect $(docker ps -aq)";
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         if (!output.trim()) {
@@ -426,11 +435,14 @@ export function registerContainerTopologyTools(
   // Tool 4: container port conflict check - Identify port conflicts
   server.tool(
     "container port conflict check",
-    "Check for port conflicts between containers. Identifies duplicate port mappings that could cause conflicts.",
-    {},
-    async () => {
+    "Check for port conflicts between containers. Identifies duplicate port mappings that could cause conflicts. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
-        const command = "docker inspect $(docker ps -aq)";
+        let command = "docker inspect $(docker ps -aq)";
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         if (!output.trim()) {
@@ -525,11 +537,12 @@ export function registerContainerTopologyTools(
   // Tool 5: container communication test - Test container connectivity
   server.tool(
     "container communication test",
-    "Test network connectivity between two containers. Uses ping or netcat to verify if containers can communicate.",
+    "Test network connectivity between two containers. Uses ping or netcat to verify if containers can communicate. Supports comprehensive output filtering.",
     {
       fromContainer: z.string().describe("Source container name or ID"),
       toContainer: z.string().describe("Target container name or ID"),
       port: z.number().optional().describe("Port to test (uses netcat if specified, otherwise uses ping)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -542,7 +555,8 @@ export function registerContainerTopologyTools(
           result += `Port: ${args.port}\n\n`;
 
           // Test with netcat (nc)
-          const command = `docker exec ${args.fromContainer} sh -c "command -v nc >/dev/null 2>&1 && nc -zv ${args.toContainer} ${args.port} 2>&1 || echo 'netcat not available in container'"`;
+          let command = `docker exec ${args.fromContainer} sh -c "command -v nc >/dev/null 2>&1 && nc -zv ${args.toContainer} ${args.port} 2>&1 || echo 'netcat not available in container'"`;
+          command = applyFilters(command, args);
           const output = await sshExecutor(command);
 
           result += "Netcat Test Result:\n";
@@ -561,7 +575,8 @@ export function registerContainerTopologyTools(
           result += "\n";
 
           // Test with ping
-          const command = `docker exec ${args.fromContainer} ping -c 4 ${args.toContainer}`;
+          let command = `docker exec ${args.fromContainer} ping -c 4 ${args.toContainer}`;
+          command = applyFilters(command, args);
           const output = await sshExecutor(command);
 
           result += "Ping Test Result:\n";
@@ -602,10 +617,11 @@ export function registerContainerTopologyTools(
   // Tool 6: container dns test - DNS resolution testing
   server.tool(
     "container dns test",
-    "Test DNS resolution. Uses nslookup or dig to resolve hostnames. Optionally specify a DNS server.",
+    "Test DNS resolution. Uses nslookup or dig to resolve hostnames. Optionally specify a DNS server. Supports comprehensive output filtering.",
     {
       hostname: z.string().describe("Hostname to resolve"),
       dnsServer: z.string().optional().describe("DNS server to use (optional)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -622,6 +638,7 @@ export function registerContainerTopologyTools(
         let command = args.dnsServer
           ? `nslookup ${args.hostname} ${args.dnsServer}`
           : `nslookup ${args.hostname}`;
+        command = applyFilters(command, args);
 
         try {
           const output = await sshExecutor(command);
@@ -671,15 +688,17 @@ export function registerContainerTopologyTools(
   // Tool 7: container ping test - Connectivity testing
   server.tool(
     "container ping test",
-    "Test network connectivity using ping. Default is 4 packets.",
+    "Test network connectivity using ping. Default is 4 packets. Supports comprehensive output filtering.",
     {
       host: z.string().describe("Host to ping (IP address or hostname)"),
       count: z.number().optional().default(4).describe("Number of packets to send (default: 4)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
         const count = args.count ?? 4;
-        const command = `ping -c ${count} ${args.host}`;
+        let command = `ping -c ${count} ${args.host}`;
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         let result = `Ping Test\n`;
@@ -715,9 +734,10 @@ export function registerContainerTopologyTools(
   // Tool 8: container traceroute test - Network path tracing
   server.tool(
     "container traceroute test",
-    "Trace the network path to a host. Uses traceroute or tracepath.",
+    "Trace the network path to a host. Uses traceroute or tracepath. Supports comprehensive output filtering.",
     {
       host: z.string().describe("Host to trace route to (IP address or hostname)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -727,7 +747,8 @@ export function registerContainerTopologyTools(
 
         // Try traceroute first
         try {
-          const command = `traceroute ${args.host}`;
+          let command = `traceroute ${args.host}`;
+          command = applyFilters(command, args);
           const output = await sshExecutor(command);
           result += "traceroute Result:\n";
           result += "-".repeat(60) + "\n";

@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { applyFilters, outputFiltersSchema } from "./filters.js";
 
 /**
  * SSH executor function type that executes commands on remote server
@@ -16,12 +17,14 @@ export function registerPluginConfigTools(
   // Plugin list plugins
   server.tool(
     "plugin list plugins",
-    "List all installed Unraid plugins with their versions by reading from /boot/config/plugins/",
-    {},
-    async (_args) => {
+    "List all installed Unraid plugins with their versions by reading from /boot/config/plugins/. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         // List all plugin directories and get .plg files
-        const command = `
+        let command = `
           for dir in /boot/config/plugins/*/; do
             if [ -d "$dir" ]; then
               plugin_name=$(basename "$dir")
@@ -41,6 +44,7 @@ export function registerPluginConfigTools(
           done
         `.trim();
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         if (!output || output.trim() === "") {
@@ -85,11 +89,13 @@ export function registerPluginConfigTools(
   // Plugin check plugin updates
   server.tool(
     "plugin check plugin updates",
-    "Check for available plugin updates by parsing .plg files for update URLs and comparing versions",
-    {},
-    async (_args) => {
+    "Check for available plugin updates by parsing .plg files for update URLs and comparing versions. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
-        const command = `
+        let command = `
           for plg_file in /boot/config/plugins/*/*.plg; do
             if [ -f "$plg_file" ]; then
               plugin_name=$(basename "$(dirname "$plg_file")")
@@ -109,6 +115,7 @@ export function registerPluginConfigTools(
           done
         `.trim();
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         if (!output || output.trim() === "") {
@@ -156,9 +163,10 @@ export function registerPluginConfigTools(
   // Plugin read docker template
   server.tool(
     "plugin read docker template",
-    "Read and parse a Docker template XML file from /boot/config/plugins/dockerMan/templates-user/",
+    "Read and parse a Docker template XML file from /boot/config/plugins/dockerMan/templates-user/. Supports comprehensive output filtering.",
     {
       template: z.string().describe("Template name (with or without .xml extension)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -170,7 +178,7 @@ export function registerPluginConfigTools(
         const templatePath = `/boot/config/plugins/dockerMan/templates-user/${templateName}`;
 
         // Check if file exists and read it
-        const command = `
+        let command = `
           if [ -f "${templatePath}" ]; then
             cat "${templatePath}"
           else
@@ -180,6 +188,7 @@ export function registerPluginConfigTools(
           fi
         `.trim();
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -202,11 +211,13 @@ export function registerPluginConfigTools(
   // Plugin list user scripts
   server.tool(
     "plugin list user scripts",
-    "List all user scripts from /boot/config/plugins/user.scripts/scripts/ with their schedules and last run times",
-    {},
-    async (_args) => {
+    "List all user scripts from /boot/config/plugins/user.scripts/scripts/ with their schedules and last run times. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
-        const command = `
+        let command = `
           scripts_dir="/boot/config/plugins/user.scripts/scripts"
 
           if [ ! -d "$scripts_dir" ]; then
@@ -249,6 +260,7 @@ export function registerPluginConfigTools(
           done
         `.trim();
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         if (!output || output.trim() === "" || output.includes("User scripts directory not found")) {
@@ -309,13 +321,14 @@ export function registerPluginConfigTools(
   // Plugin validate docker compose
   server.tool(
     "plugin validate docker compose",
-    "Validate a Docker Compose file by checking YAML syntax and basic structure (services, networks, volumes)",
+    "Validate a Docker Compose file by checking YAML syntax and basic structure (services, networks, volumes). Supports comprehensive output filtering.",
     {
       composePath: z.string().describe("Path to the docker-compose.yml file"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
-        const command = `
+        let command = `
           compose_file="${args.composePath}"
 
           if [ ! -f "$compose_file" ]; then
@@ -369,6 +382,7 @@ export function registerPluginConfigTools(
           fi
         `.trim();
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -391,9 +405,10 @@ export function registerPluginConfigTools(
   // Plugin check share config
   server.tool(
     "plugin check share config",
-    "Validate share configurations from /boot/config/shares/*.cfg and check for misconfigurations",
+    "Validate share configurations from /boot/config/shares/*.cfg and check for misconfigurations. Supports comprehensive output filtering.",
     {
       share: z.string().optional().describe("Specific share name to check (optional, checks all if not specified)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -401,7 +416,7 @@ export function registerPluginConfigTools(
           ? `/boot/config/shares/${args.share}.cfg`
           : "/boot/config/shares/*.cfg";
 
-        const command = `
+        let command = `
           for cfg_file in ${sharePattern}; do
             if [ ! -f "$cfg_file" ]; then
               echo "No share configuration files found"
@@ -456,6 +471,7 @@ export function registerPluginConfigTools(
           done
         `.trim();
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         if (output.includes("No share configuration files found")) {
@@ -491,11 +507,13 @@ export function registerPluginConfigTools(
   // Plugin check disk assignments
   server.tool(
     "plugin check disk assignments",
-    "Verify disk assignments from /boot/config/disk.cfg showing array and cache disk assignments",
-    {},
-    async (_args) => {
+    "Verify disk assignments from /boot/config/disk.cfg showing array and cache disk assignments. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
-        const command = `
+        let command = `
           disk_cfg="/boot/config/disk.cfg"
 
           if [ ! -f "$disk_cfg" ]; then
@@ -540,6 +558,7 @@ export function registerPluginConfigTools(
           echo "Cache Disks: $cache_count"
         `.trim();
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -562,7 +581,7 @@ export function registerPluginConfigTools(
   // Plugin find recent changes
   server.tool(
     "plugin find recent changes",
-    "Find recently modified configuration files within a specified time period",
+    "Find recently modified configuration files within a specified time period. Supports comprehensive output filtering.",
     {
       path: z
         .string()
@@ -576,6 +595,7 @@ export function registerPluginConfigTools(
         .optional()
         .default(24)
         .describe("Number of hours to look back (default: 24)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -583,7 +603,7 @@ export function registerPluginConfigTools(
         const hours = args.hours ?? 24;
         const days = hours / 24;
 
-        const command = `
+        let command = `
           if [ ! -d "${path}" ]; then
             echo "ERROR: Path not found: ${path}"
             exit 1
@@ -602,6 +622,7 @@ export function registerPluginConfigTools(
           echo "Total files modified: $count"
         `.trim();
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         if (output.includes("Total files modified: 0")) {

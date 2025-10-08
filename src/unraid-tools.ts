@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { applyFilters, applyFiltersToText, outputFiltersSchema } from "./filters.js";
 
 /**
  * SSH executor function type that executes commands on remote host
@@ -16,17 +17,23 @@ export function registerUnraidTools(
   // Tool 1: unraid array status - Check Unraid array status
   server.tool(
     "unraid array status",
-    "Check Unraid array status including array state, disk status, and parity information. Shows which disks are active, their state, and sync progress if applicable.",
-    {},
-    async () => {
+    "Check Unraid array status including array state, disk status, and parity information. Shows which disks are active, their state, and sync progress if applicable. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         // Try /proc/mdcmd first (more detailed), fall back to mdcmd status
         let output: string;
         try {
-          output = await sshExecutor("cat /proc/mdcmd");
+          let command = "cat /proc/mdcmd";
+          command = applyFilters(command, args);
+          output = await sshExecutor(command);
         } catch {
           // Fallback to mdcmd status command
-          output = await sshExecutor("mdcmd status");
+          let command = "mdcmd status";
+          command = applyFilters(command, args);
+          output = await sshExecutor(command);
         }
 
         return {
@@ -54,9 +61,10 @@ export function registerUnraidTools(
   // Tool 2: unraid drive smart status - Get SMART data for a drive
   server.tool(
     "unraid drive smart status",
-    "Get SMART data for a specific drive. Shows health status, temperature, error count, power-on hours, and other diagnostic information. Automatically detects drive type (SATA/NVMe).",
+    "Get SMART data for a specific drive. Shows health status, temperature, error count, power-on hours, and other diagnostic information. Automatically detects drive type (SATA/NVMe). Supports comprehensive output filtering.",
     {
       device: z.string().describe("Device name (e.g., 'sda', 'nvme0n1')"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -73,6 +81,7 @@ export function registerUnraidTools(
           command = `smartctl -a -d ata ${devicePath} || smartctl -a ${devicePath}`;
         }
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -100,9 +109,11 @@ export function registerUnraidTools(
   // Tool 3: unraid check temperatures - System and drive temperatures
   server.tool(
     "unraid check temperatures",
-    "Get system and drive temperatures. Collects CPU/system temperatures using sensors and drive temperatures from SMART data. Provides comprehensive thermal monitoring.",
-    {},
-    async () => {
+    "Get system and drive temperatures. Collects CPU/system temperatures using sensors and drive temperatures from SMART data. Provides comprehensive thermal monitoring. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         let output = "";
 
@@ -144,11 +155,14 @@ export function registerUnraidTools(
           output += "Could not retrieve drive temperatures\n";
         }
 
+        // Apply filters to the constructed output
+        const filteredOutput = applyFiltersToText(output, args);
+
         return {
           content: [
             {
               type: "text",
-              text: output,
+              text: filteredOutput,
             },
           ],
         };
@@ -169,11 +183,15 @@ export function registerUnraidTools(
   // Tool 4: unraid shares list - List Unraid user shares
   server.tool(
     "unraid shares list",
-    "List all Unraid user shares. Shows share names and basic information from /mnt/user/ directory.",
-    {},
-    async () => {
+    "List all Unraid user shares. Shows share names and basic information from /mnt/user/ directory. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
-        const output = await sshExecutor("ls -la /mnt/user/");
+        let command = "ls -la /mnt/user/";
+        command = applyFilters(command, args);
+        const output = await sshExecutor(command);
 
         return {
           content: [
@@ -200,9 +218,10 @@ export function registerUnraidTools(
   // Tool 5: unraid share usage - Check share disk usage
   server.tool(
     "unraid share usage",
-    "Check disk usage for Unraid user shares. Can show usage for a specific share or all shares. Displays human-readable sizes.",
+    "Check disk usage for Unraid user shares. Can show usage for a specific share or all shares. Displays human-readable sizes. Supports comprehensive output filtering.",
     {
       share: z.string().optional().describe("Specific share name (optional, shows all shares if not specified)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -220,6 +239,7 @@ export function registerUnraidTools(
           title = "All Shares Usage";
         }
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {

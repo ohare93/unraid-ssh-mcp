@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { applyFilters, outputFiltersSchema } from "./filters.js";
 
 /**
  * SSH executor function type that executes commands on remote host
@@ -17,12 +18,14 @@ export function registerPerformanceSecurityTools(
   // Tool 1: performance identify bottleneck - CPU/disk/network bottleneck analysis
   server.tool(
     "performance identify bottleneck",
-    "Analyze system to identify primary performance bottleneck (CPU, disk I/O, or network). Checks CPU usage, disk I/O wait times, and network saturation, then suggests improvements.",
-    {},
-    async (_args) => {
+    "Analyze system to identify primary performance bottleneck (CPU, disk I/O, or network). Checks CPU usage, disk I/O wait times, and network saturation, then suggests improvements. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         // Collect multiple metrics to identify bottlenecks
-        const commands = `
+        let commands = `
 # Get CPU usage and I/O wait
 top -b -n 2 -d 1 | grep "Cpu(s)" | tail -1
 
@@ -46,6 +49,7 @@ free -m
 ps aux --sort=-%cpu | head -15
 `;
 
+        commands = applyFilters(commands, args);
         const output = await sshExecutor(commands);
 
         // Parse the output to identify bottlenecks
@@ -132,12 +136,14 @@ ps aux --sort=-%cpu | head -15
   // Tool 2: performance network bandwidth by container - Network usage per container
   server.tool(
     "performance network bandwidth by container",
-    "Show network bandwidth usage per Docker container. Parses docker stats or /sys/class/net/*/statistics/ to display network I/O per container.",
-    {},
-    async (_args) => {
+    "Show network bandwidth usage per Docker container. Parses docker stats or /sys/class/net/*/statistics/ to display network I/O per container. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         // Use docker stats for container network I/O
-        const command = `
+        let command = `
 # Get network stats from docker stats
 docker stats --no-stream --format "table {{.Container}}\\t{{.Name}}\\t{{.NetIO}}" 2>/dev/null || echo "Docker not available"
 
@@ -147,6 +153,7 @@ echo "=== Network Interface Stats ==="
 cat /proc/net/dev
 `;
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -174,11 +181,12 @@ cat /proc/net/dev
   // Tool 3: performance track metric over time - Sample metrics over time
   server.tool(
     "performance track metric over time",
-    "Sample system metrics over time and return time series data. Tracks CPU, memory, or disk metrics at specified intervals. Useful for identifying trends and patterns.",
+    "Sample system metrics over time and return time series data. Tracks CPU, memory, or disk metrics at specified intervals. Useful for identifying trends and patterns. Supports comprehensive output filtering.",
     {
       metric: z.enum(["cpu", "memory", "disk"]).describe("Metric to track: 'cpu', 'memory', or 'disk'"),
       durationSeconds: z.number().int().positive().optional().default(30).describe("Total duration to track in seconds (default: 30)"),
       intervalSeconds: z.number().int().positive().optional().default(5).describe("Sampling interval in seconds (default: 5)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -221,6 +229,7 @@ done
 `;
         }
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         const result = `Metric Tracking: ${metric}\nDuration: ${duration}s, Interval: ${interval}s, Samples: ${samples}\n\nTimestamp,Value\n${output}\n\nNote: Values represent percentage usage for the tracked metric.`;
@@ -250,13 +259,15 @@ done
   // Tool 4: security check open ports - List externally open ports
   server.tool(
     "security check open ports",
-    "List all externally open ports and the processes listening on them. Uses ss or netstat to show listening TCP and UDP ports with process information. Important for security auditing.",
-    {},
-    async (_args) => {
+    "List all externally open ports and the processes listening on them. Uses ss or netstat to show listening TCP and UDP ports with process information. Important for security auditing. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         // Use ss if available, fallback to netstat
         // -t: TCP, -u: UDP, -l: listening, -n: numeric, -p: process
-        const command = `
+        let command = `
 if command -v ss >/dev/null 2>&1; then
   echo "=== Listening Ports (ss) ==="
   ss -tulnp | head -50
@@ -274,6 +285,7 @@ else
 fi
 `;
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -301,11 +313,13 @@ fi
   // Tool 5: security audit container privileges - Privileged container audit
   server.tool(
     "security audit container privileges",
-    "Audit Docker containers for elevated privileges and security concerns. Checks for privileged mode, host network mode, and dangerous capabilities. Essential for container security.",
-    {},
-    async (_args) => {
+    "Audit Docker containers for elevated privileges and security concerns. Checks for privileged mode, host network mode, and dangerous capabilities. Essential for container security. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
-        const command = `
+        let command = `
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker not available"
   exit 0
@@ -363,6 +377,7 @@ docker ps --format "{{.Names}}" | while read name; do
 done
 `;
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -390,11 +405,13 @@ done
   // Tool 6: security check ssh connections - Active SSH sessions
   server.tool(
     "security check ssh connections",
-    "Show active SSH sessions and connections. Lists all logged-in users, their connection sources, login times, and current activities. Useful for security monitoring.",
-    {},
-    async (_args) => {
+    "Show active SSH sessions and connections. Lists all logged-in users, their connection sources, login times, and current activities. Useful for security monitoring. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
-        const command = `
+        let command = `
 echo "=== Active SSH Sessions ==="
 w
 
@@ -417,6 +434,7 @@ else
 fi
 `;
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -444,9 +462,10 @@ fi
   // Tool 7: security check cert expiry - SSL certificate expiration
   server.tool(
     "security check cert expiry",
-    "Check SSL/TLS certificate expiration dates. Scans common certificate locations or a specified path. Shows certificate details including subject, issuer, and expiration date. Helps prevent service disruptions from expired certificates.",
+    "Check SSL/TLS certificate expiration dates. Scans common certificate locations or a specified path. Shows certificate details including subject, issuer, and expiration date. Helps prevent service disruptions from expired certificates. Supports comprehensive output filtering.",
     {
       certPath: z.string().optional().describe("Optional specific certificate file path to check. If not provided, checks common locations."),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -532,6 +551,7 @@ fi
 `;
         }
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {

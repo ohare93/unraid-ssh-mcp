@@ -1,6 +1,6 @@
 {
   "name": "mcp-ssh-unraid",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "MCP server for SSH access to Unraid",
   "main": "dist/index.js",
   "type": "module",

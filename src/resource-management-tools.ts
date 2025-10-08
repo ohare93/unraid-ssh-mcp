@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { applyFilters, applyFiltersToText, outputFiltersSchema } from "./filters.js";
 
 /**
  * SSH executor function type that executes commands on remote host
@@ -16,9 +17,11 @@ export function registerResourceManagementTools(
   // Tool 1: resource find dangling resources - Find unused Docker resources
   server.tool(
     "resource find dangling resources",
-    "Find unused Docker resources including dangling volumes, unused networks, and dangling images. Shows resource names and sizes to help identify cleanup opportunities. READ-ONLY - does not perform any cleanup.",
-    {},
-    async () => {
+    "Find unused Docker resources including dangling volumes, unused networks, and dangling images. Shows resource names and sizes to help identify cleanup opportunities. READ-ONLY - does not perform any cleanup. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         // Get dangling volumes
         const volumesCommand = "docker volume ls -f dangling=true --format json";
@@ -155,11 +158,13 @@ export function registerResourceManagementTools(
         report += `  - ${unusedNetworks.length} networks\n`;
         report += `  - ${images.length} images\n`;
 
+        const filteredReport = applyFiltersToText(report, args);
+
         return {
           content: [
             {
               type: "text",
-              text: report,
+              text: filteredReport,
             },
           ],
         };
@@ -180,7 +185,7 @@ export function registerResourceManagementTools(
   // Tool 2: resource find resource hogs - Find top resource consumers
   server.tool(
     "resource find resource hogs",
-    "Identify top resource consumers on the system. Can sort by CPU, memory, or I/O usage. Analyzes both system processes and Docker containers to find what's consuming the most resources.",
+    "Identify top resource consumers on the system. Can sort by CPU, memory, or I/O usage. Analyzes both system processes and Docker containers to find what's consuming the most resources. Supports comprehensive output filtering.",
     {
       sortBy: z
         .enum(["cpu", "memory", "io"])
@@ -192,6 +197,7 @@ export function registerResourceManagementTools(
         .optional()
         .default(10)
         .describe("Number of top consumers to show (default: 10)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -266,11 +272,13 @@ export function registerResourceManagementTools(
           }
         }
 
+        const filteredReport = applyFiltersToText(report, args);
+
         return {
           content: [
             {
               type: "text",
-              text: report,
+              text: filteredReport,
             },
           ],
         };
@@ -291,7 +299,7 @@ export function registerResourceManagementTools(
   // Tool 3: resource disk space analyzer - Find largest files and directories
   server.tool(
     "resource disk space analyzer",
-    "Analyze disk space usage by finding the largest files and directories. Useful for identifying what's consuming disk space. Can filter by path, depth, and minimum file size.",
+    "Analyze disk space usage by finding the largest files and directories. Useful for identifying what's consuming disk space. Can filter by path, depth, and minimum file size. Supports comprehensive output filtering.",
     {
       path: z
         .string()
@@ -308,6 +316,7 @@ export function registerResourceManagementTools(
         .optional()
         .default("1G")
         .describe("Minimum size to report (e.g., 1G, 100M) (default: 1G)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -353,11 +362,13 @@ export function registerResourceManagementTools(
           report += "Unable to get filesystem usage\n";
         }
 
+        const filteredReport = applyFiltersToText(report, args);
+
         return {
           content: [
             {
               type: "text",
-              text: report,
+              text: filteredReport,
             },
           ],
         };
@@ -378,9 +389,11 @@ export function registerResourceManagementTools(
   // Tool 4: resource docker system df - Docker disk usage breakdown
   server.tool(
     "resource docker system df",
-    "Show detailed Docker disk usage breakdown including images, containers, volumes, and build cache. Provides comprehensive view of Docker storage consumption.",
-    {},
-    async () => {
+    "Show detailed Docker disk usage breakdown including images, containers, volumes, and build cache. Provides comprehensive view of Docker storage consumption. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         // Get verbose Docker system disk usage
         const command = "docker system df -v";
@@ -426,11 +439,13 @@ export function registerResourceManagementTools(
           // If JSON parsing fails, just show the verbose output above
         }
 
+        const filteredReport = applyFiltersToText(report, args);
+
         return {
           content: [
             {
               type: "text",
-              text: report,
+              text: filteredReport,
             },
           ],
         };
@@ -451,9 +466,11 @@ export function registerResourceManagementTools(
   // Tool 5: resource find zombie processes - Find zombie/stuck processes
   server.tool(
     "resource find zombie processes",
-    "Find zombie (defunct) and stuck processes on the system. Zombie processes are terminated processes that haven't been properly cleaned up by their parent. Shows process ID, parent PID, and command.",
-    {},
-    async () => {
+    "Find zombie (defunct) and stuck processes on the system. Zombie processes are terminated processes that haven't been properly cleaned up by their parent. Shows process ID, parent PID, and command. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         let report = "ZOMBIE AND STUCK PROCESSES\n";
         report += "=".repeat(70) + "\n\n";
@@ -523,11 +540,13 @@ export function registerResourceManagementTools(
           report += "Unable to get load average.\n";
         }
 
+        const filteredReport = applyFiltersToText(report, args);
+
         return {
           content: [
             {
               type: "text",
-              text: report,
+              text: filteredReport,
             },
           ],
         };
@@ -548,13 +567,14 @@ export function registerResourceManagementTools(
   // Tool 6: resource container io profile - Profile container I/O usage
   server.tool(
     "resource container io profile",
-    "Profile I/O usage of Docker containers over a specified duration. Shows which containers are performing the most read/write operations. Useful for identifying I/O-intensive workloads.",
+    "Profile I/O usage of Docker containers over a specified duration. Shows which containers are performing the most read/write operations. Useful for identifying I/O-intensive workloads. Supports comprehensive output filtering.",
     {
       duration: z
         .number()
         .optional()
         .default(5)
         .describe("Duration in seconds to profile (default: 5)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -636,11 +656,13 @@ export function registerResourceManagementTools(
           report += "iostat not available\n";
         }
 
+        const filteredReport = applyFiltersToText(report, args);
+
         return {
           content: [
             {
               type: "text",
-              text: report,
+              text: filteredReport,
             },
           ],
         };

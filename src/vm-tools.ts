@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { applyFilters, outputFiltersSchema } from "./filters.js";
 
 /**
  * SSH executor function type that executes commands on remote host
@@ -16,11 +17,14 @@ export function registerVMTools(
   // Tool 1: vm list - List VMs with status
   server.tool(
     "vm list",
-    "List all virtual machines with their status. Returns VM names, IDs, and states (running, shut off, paused, etc.).",
-    {},
-    async () => {
+    "List all virtual machines with their status. Returns VM names, IDs, and states (running, shut off, paused, etc.). Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
-        const command = "virsh list --all";
+        let command = "virsh list --all";
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -48,13 +52,15 @@ export function registerVMTools(
   // Tool 2: vm info - VM resource allocation and config
   server.tool(
     "vm info",
-    "Get detailed information about a virtual machine including CPU, memory, state, autostart, and other configuration details.",
+    "Get detailed information about a virtual machine including CPU, memory, state, autostart, and other configuration details. Supports comprehensive output filtering.",
     {
       vm: z.string().describe("VM name"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
-        const command = `virsh dominfo ${args.vm}`;
+        let command = `virsh dominfo ${args.vm}`;
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -82,14 +88,16 @@ export function registerVMTools(
   // Tool 3: vm vnc info - VNC connection details
   server.tool(
     "vm vnc info",
-    "Get VNC connection details for a virtual machine. Shows VNC port/display information for remote access.",
+    "Get VNC connection details for a virtual machine. Shows VNC port/display information for remote access. Supports comprehensive output filtering.",
     {
       vm: z.string().describe("VM name"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
         // Try to get VNC display using virsh vncdisplay
-        const command = `virsh vncdisplay ${args.vm}`;
+        let command = `virsh vncdisplay ${args.vm}`;
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         const result = output.trim();
@@ -144,10 +152,11 @@ export function registerVMTools(
   // Tool 4: vm libvirt logs - Read libvirt logs
   server.tool(
     "vm libvirt logs",
-    "Read libvirt/QEMU logs for virtual machines. Can show logs for a specific VM or all VMs. Useful for debugging VM issues.",
+    "Read libvirt/QEMU logs for virtual machines. Can show logs for a specific VM or all VMs. Useful for debugging VM issues. Supports comprehensive output filtering.",
     {
       vm: z.string().optional().describe("VM name (optional - if not specified, shows all available log files)"),
       lines: z.number().optional().default(100).describe("Number of lines to show from end of log (default: 100)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -155,7 +164,8 @@ export function registerVMTools(
 
         if (args.vm) {
           // Show logs for specific VM
-          const command = `tail -n ${lines} /var/log/libvirt/qemu/${args.vm}.log`;
+          let command = `tail -n ${lines} /var/log/libvirt/qemu/${args.vm}.log`;
+          command = applyFilters(command, args);
           const output = await sshExecutor(command);
 
           return {
@@ -168,7 +178,8 @@ export function registerVMTools(
           };
         } else {
           // List all available log files
-          const listCommand = "ls -lh /var/log/libvirt/qemu/*.log 2>/dev/null || echo 'No log files found'";
+          let listCommand = "ls -lh /var/log/libvirt/qemu/*.log 2>/dev/null || echo 'No log files found'";
+          listCommand = applyFilters(listCommand, args);
           const output = await sshExecutor(listCommand);
 
           return {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { applyFilters, applyFiltersToText, outputFiltersSchema } from "./filters.js";
 
 /**
  * SSH executor function type that executes commands on remote host
@@ -73,9 +74,11 @@ export function registerHealthDiagnosticsTools(
   // Tool 1: health check comprehensive - All-in-one health check
   server.tool(
     "health check comprehensive",
-    "Perform a comprehensive health check of the Unraid system. Aggregates array status, drive temperatures, disk space, container health, and CPU/memory usage. Returns a summary with OK/WARNING/CRITICAL status for each category.",
-    {},
-    async (_args) => {
+    "Perform a comprehensive health check of the Unraid system. Aggregates array status, drive temperatures, disk space, container health, and CPU/memory usage. Returns a summary with OK/WARNING/CRITICAL status for each category. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         const results: HealthCheckResult[] = [];
 
@@ -304,11 +307,14 @@ export function registerHealthDiagnosticsTools(
             ? "WARNING"
             : "OK";
 
+        const output = `=== Comprehensive Health Check ===\n\nOverall Status: ${overallStatus}\n\n${summary}`;
+        const filteredOutput = applyFiltersToText(output, args);
+
         return {
           content: [
             {
               type: "text",
-              text: `=== Comprehensive Health Check ===\n\nOverall Status: ${overallStatus}\n\n${summary}`,
+              text: filteredOutput,
             },
           ],
         };
@@ -329,9 +335,11 @@ export function registerHealthDiagnosticsTools(
   // Tool 2: health detect common issues - Pattern-match known problems
   server.tool(
     "health detect common issues",
-    "Scan for common known issues and problems. Checks for high temperatures (>50°C), disks >90% full, containers restarting, parity errors, and unclean shutdowns. Returns a list of detected issues with severity levels.",
-    {},
-    async (_args) => {
+    "Scan for common known issues and problems. Checks for high temperatures (>50°C), disks >90% full, containers restarting, parity errors, and unclean shutdowns. Returns a list of detected issues with severity levels. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         const issues: DetectedIssue[] = [];
 
@@ -494,11 +502,13 @@ export function registerHealthDiagnosticsTools(
 
         // Format results
         if (issues.length === 0) {
+          const output = "=== Common Issues Detection ===\n\nNo issues detected. System appears healthy.";
+          const filteredOutput = applyFiltersToText(output, args);
           return {
             content: [
               {
                 type: "text",
-                text: "=== Common Issues Detection ===\n\nNo issues detected. System appears healthy.",
+                text: filteredOutput,
               },
             ],
           };
@@ -515,11 +525,14 @@ export function registerHealthDiagnosticsTools(
 
         const summary = `Found ${issues.length} issue(s):\n- Critical: ${issues.filter((i) => i.severity === "critical").length}\n- High: ${issues.filter((i) => i.severity === "high").length}\n- Medium: ${issues.filter((i) => i.severity === "medium").length}\n- Low: ${issues.filter((i) => i.severity === "low").length}`;
 
+        const output = `=== Common Issues Detection ===\n\n${summary}\n\n${issuesList}`;
+        const filteredOutput = applyFiltersToText(output, args);
+
         return {
           content: [
             {
               type: "text",
-              text: `=== Common Issues Detection ===\n\n${summary}\n\n${issuesList}`,
+              text: filteredOutput,
             },
           ],
         };
@@ -540,7 +553,7 @@ export function registerHealthDiagnosticsTools(
   // Tool 3: health threshold alerts - Check metrics against thresholds
   server.tool(
     "health threshold alerts",
-    "Check if any system metrics exceed specified thresholds. Monitors CPU usage, memory usage, disk usage, and drive temperatures against custom or default thresholds. Returns alerts when thresholds are exceeded.",
+    "Check if any system metrics exceed specified thresholds. Monitors CPU usage, memory usage, disk usage, and drive temperatures against custom or default thresholds. Returns alerts when thresholds are exceeded. Supports comprehensive output filtering.",
     {
       cpuThreshold: z
         .number()
@@ -570,6 +583,7 @@ export function registerHealthDiagnosticsTools(
         .optional()
         .default(50)
         .describe("Drive temperature threshold in Celsius (default: 50)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -665,11 +679,13 @@ export function registerHealthDiagnosticsTools(
 
         // Format results
         if (alerts.length === 0) {
+          const output = `=== Threshold Alerts ===\n\nThresholds:\n- CPU: ${cpuThreshold}%\n- Memory: ${memThreshold}%\n- Disk: ${diskThreshold}%\n- Temperature: ${tempThreshold}°C\n\nNo thresholds exceeded. All metrics within normal range.`;
+          const filteredOutput = applyFiltersToText(output, args);
           return {
             content: [
               {
                 type: "text",
-                text: `=== Threshold Alerts ===\n\nThresholds:\n- CPU: ${cpuThreshold}%\n- Memory: ${memThreshold}%\n- Disk: ${diskThreshold}%\n- Temperature: ${tempThreshold}°C\n\nNo thresholds exceeded. All metrics within normal range.`,
+                text: filteredOutput,
               },
             ],
           };
@@ -677,11 +693,14 @@ export function registerHealthDiagnosticsTools(
 
         const alertsList = alerts.map((alert, i) => `${i + 1}. ${alert}`).join("\n");
 
+        const output = `=== Threshold Alerts ===\n\nThresholds:\n- CPU: ${cpuThreshold}%\n- Memory: ${memThreshold}%\n- Disk: ${diskThreshold}%\n- Temperature: ${tempThreshold}°C\n\n${alerts.length} Alert(s):\n\n${alertsList}`;
+        const filteredOutput = applyFiltersToText(output, args);
+
         return {
           content: [
             {
               type: "text",
-              text: `=== Threshold Alerts ===\n\nThresholds:\n- CPU: ${cpuThreshold}%\n- Memory: ${memThreshold}%\n- Disk: ${diskThreshold}%\n- Temperature: ${tempThreshold}°C\n\n${alerts.length} Alert(s):\n\n${alertsList}`,
+              text: filteredOutput,
             },
           ],
         };
@@ -702,13 +721,14 @@ export function registerHealthDiagnosticsTools(
   // Tool 4: health compare baseline - Compare vs baseline
   server.tool(
     "health compare baseline",
-    "Compare current system state against a saved baseline snapshot. Can save a new baseline or compare against an existing one. Tracks changes in container count, disk usage, running processes, and memory usage over time.",
+    "Compare current system state against a saved baseline snapshot. Can save a new baseline or compare against an existing one. Tracks changes in container count, disk usage, running processes, and memory usage over time. Supports comprehensive output filtering.",
     {
       baselineFile: z
         .string()
         .optional()
         .default("/tmp/unraid-baseline.json")
         .describe("Path to baseline file (default: /tmp/unraid-baseline.json)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -777,11 +797,13 @@ export function registerHealthDiagnosticsTools(
           try {
             const escapedJson = JSON.stringify(currentState, null, 2).replace(/'/g, "'\"'\"'");
             await sshExecutor(`echo '${escapedJson}' > ${baselineFile}`);
+            const output = `=== Baseline Comparison ===\n\nNo existing baseline found. Current state saved as new baseline to:\n${baselineFile}\n\nCurrent State:\n${JSON.stringify(currentState, null, 2)}`;
+            const filteredOutput = applyFiltersToText(output, args);
             return {
               content: [
                 {
                   type: "text",
-                  text: `=== Baseline Comparison ===\n\nNo existing baseline found. Current state saved as new baseline to:\n${baselineFile}\n\nCurrent State:\n${JSON.stringify(currentState, null, 2)}`,
+                  text: filteredOutput,
                 },
               ],
             };
@@ -824,11 +846,13 @@ export function registerHealthDiagnosticsTools(
         const currentDate = new Date(currentState.timestamp).toLocaleString();
 
         if (changes.length === 0) {
+          const output = `=== Baseline Comparison ===\n\nBaseline: ${baselineDate}\nCurrent: ${currentDate}\n\nNo significant changes detected since baseline.`;
+          const filteredOutput = applyFiltersToText(output, args);
           return {
             content: [
               {
                 type: "text",
-                text: `=== Baseline Comparison ===\n\nBaseline: ${baselineDate}\nCurrent: ${currentDate}\n\nNo significant changes detected since baseline.`,
+                text: filteredOutput,
               },
             ],
           };
@@ -836,11 +860,14 @@ export function registerHealthDiagnosticsTools(
 
         const changesList = changes.map((change, i) => `${i + 1}. ${change}`).join("\n");
 
+        const output = `=== Baseline Comparison ===\n\nBaseline: ${baselineDate}\nCurrent: ${currentDate}\n\n${changes.length} Change(s) Detected:\n\n${changesList}`;
+        const filteredOutput = applyFiltersToText(output, args);
+
         return {
           content: [
             {
               type: "text",
-              text: `=== Baseline Comparison ===\n\nBaseline: ${baselineDate}\nCurrent: ${currentDate}\n\n${changes.length} Change(s) Detected:\n\n${changesList}`,
+              text: filteredOutput,
             },
           ],
         };
@@ -861,13 +888,14 @@ export function registerHealthDiagnosticsTools(
   // Tool 5: health generate diagnostic report - Comprehensive report
   server.tool(
     "health generate diagnostic report",
-    "Generate a comprehensive diagnostic report of the entire Unraid system. Aggregates system information, array status, container status, disk usage, temperatures, and recent log entries into a formatted report. Supports text or markdown output.",
+    "Generate a comprehensive diagnostic report of the entire Unraid system. Aggregates system information, array status, container status, disk usage, temperatures, and recent log entries into a formatted report. Supports text or markdown output. Supports comprehensive output filtering.",
     {
       format: z
         .enum(["text", "markdown"])
         .optional()
         .default("text")
         .describe("Report format: 'text' or 'markdown' (default: text)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -1020,11 +1048,13 @@ export function registerHealthDiagnosticsTools(
           report += "=".repeat(60) + "\n";
         }
 
+        const filteredReport = applyFiltersToText(report, args);
+
         return {
           content: [
             {
               type: "text",
-              text: report,
+              text: filteredReport,
             },
           ],
         };
@@ -1045,12 +1075,13 @@ export function registerHealthDiagnosticsTools(
   // Tool 6: health snapshot system state - Save system state
   server.tool(
     "health snapshot system state",
-    "Capture and save a complete snapshot of the current system state. Includes container information, disk usage, running processes, memory state, and network configuration. Returns the snapshot as JSON and optionally saves it to a file.",
+    "Capture and save a complete snapshot of the current system state. Includes container information, disk usage, running processes, memory state, and network configuration. Returns the snapshot as JSON and optionally saves it to a file. Supports comprehensive output filtering.",
     {
       name: z
         .string()
         .optional()
         .describe("Optional name for the snapshot (will be used in filename)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -1160,12 +1191,14 @@ export function registerHealthDiagnosticsTools(
         }
 
         const snapshotJson = JSON.stringify(snapshot, null, 2);
+        const output = `=== System State Snapshot ===\n\n${savedPath ? `Saved to: ${savedPath}\n\n` : ""}${snapshotJson}`;
+        const filteredOutput = applyFiltersToText(output, args);
 
         return {
           content: [
             {
               type: "text",
-              text: `=== System State Snapshot ===\n\n${savedPath ? `Saved to: ${savedPath}\n\n` : ""}${snapshotJson}`,
+              text: filteredOutput,
             },
           ],
         };

@@ -46,7 +46,7 @@ describe('Docker Tools', () => {
       const result = await tool.handler({ all: true });
 
       expect(mockSSHExecutor).toHaveBeenCalledWith('docker ps -a --format json');
-      expect(result.content[0].text).toContain('Docker Containers (2)');
+      expect(result.content[0].text).toContain('Docker Containers:');
       expect(result.content[0].text).toContain('container1');
       expect(result.content[0].text).toContain('container2');
     });
@@ -117,29 +117,29 @@ describe('Docker Tools', () => {
       expect(result.content[0].text).toContain('Log line 1');
     });
 
-    it('should support tail option', async () => {
+    it('should support dockerTail option', async () => {
       mockSSHExecutor.mockResolvedValue('Recent log');
 
       const tool = registeredTools.get('docker logs');
-      await tool.handler({ container: 'my-app', tail: 10 });
+      await tool.handler({ container: 'my-app', dockerTail: 10 });
 
       expect(mockSSHExecutor).toHaveBeenCalledWith('docker logs my-app --tail 10');
     });
 
-    it('should support since option', async () => {
+    it('should support dockerSince option', async () => {
       mockSSHExecutor.mockResolvedValue('Recent log');
 
       const tool = registeredTools.get('docker logs');
-      await tool.handler({ container: 'my-app', since: '5m' });
+      await tool.handler({ container: 'my-app', dockerSince: '5m' });
 
       expect(mockSSHExecutor).toHaveBeenCalledWith('docker logs my-app --since 5m');
     });
 
-    it('should support both tail and since options', async () => {
+    it('should support both dockerTail and dockerSince options', async () => {
       mockSSHExecutor.mockResolvedValue('Filtered logs');
 
       const tool = registeredTools.get('docker logs');
-      await tool.handler({ container: 'my-app', tail: 20, since: '1h' });
+      await tool.handler({ container: 'my-app', dockerTail: 20, dockerSince: '1h' });
 
       expect(mockSSHExecutor).toHaveBeenCalledWith('docker logs my-app --tail 20 --since 1h');
     });

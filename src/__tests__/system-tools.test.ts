@@ -25,11 +25,10 @@ describe('System Tools', () => {
   });
 
   describe('Tool Registration', () => {
-    it('should register all 6 system tools', () => {
-      expect(mockServer.tool).toHaveBeenCalledTimes(6);
+    it('should register all 5 system tools', () => {
+      expect(mockServer.tool).toHaveBeenCalledTimes(5);
       expect(registeredTools.has('system list files')).toBe(true);
       expect(registeredTools.has('system read file')).toBe(true);
-      expect(registeredTools.has('system tail log')).toBe(true);
       expect(registeredTools.has('system find files')).toBe(true);
       expect(registeredTools.has('system disk usage')).toBe(true);
       expect(registeredTools.has('system get system info')).toBe(true);
@@ -119,37 +118,6 @@ describe('System Tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Failed to read file');
-    });
-  });
-
-  describe('system tail log', () => {
-    it('should tail log file', async () => {
-      mockSSHExecutor.mockResolvedValue('Recent line 1\nRecent line 2');
-
-      const tool = registeredTools.get('system tail log');
-      const result = await tool.handler({ path: '/var/log/app.log' });
-
-      expect(mockSSHExecutor).toHaveBeenCalledWith('tail -n 100 "/var/log/app.log"');
-      expect(result.content[0].text).toContain('Recent line 1');
-    });
-
-    it('should respect lines parameter', async () => {
-      mockSSHExecutor.mockResolvedValue('Last 50 lines');
-
-      const tool = registeredTools.get('system tail log');
-      await tool.handler({ path: '/var/log/test.log', lines: 50 });
-
-      expect(mockSSHExecutor).toHaveBeenCalledWith('tail -n 50 "/var/log/test.log"');
-    });
-
-    it('should handle tail errors', async () => {
-      mockSSHExecutor.mockRejectedValue(new Error('File not found'));
-
-      const tool = registeredTools.get('system tail log');
-      const result = await tool.handler({ path: '/missing.log' });
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Failed to tail log file');
     });
   });
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { applyFilters, applyFiltersToText, outputFiltersSchema } from "./filters.js";
 
 /**
  * SSH executor function type that executes commands on remote host
@@ -17,13 +18,17 @@ export function registerDockerAdvancedTools(
   // Tool 1: docker container env - Show container environment variables
   server.tool(
     "docker container env",
-    "Show all environment variables configured in a Docker container. Useful for debugging configuration issues and seeing what variables are available to the container's processes.",
+    "Show all environment variables configured in a Docker container. Useful for debugging configuration issues and seeing what variables are available to the container's processes. Supports comprehensive output filtering.",
     {
       container: z.string().describe("Container name or ID"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
-        const command = `docker inspect --format='{{range .Config.Env}}{{println .}}{{end}}' ${args.container}`;
+        let command = `docker inspect --format='{{range .Config.Env}}{{println .}}{{end}}' ${args.container}`;
+
+        // Apply filters
+        command = applyFilters(command, args);
 
         const output = await sshExecutor(command);
 
@@ -54,13 +59,17 @@ export function registerDockerAdvancedTools(
   // Tool 2: docker top - Show processes inside container
   server.tool(
     "docker top",
-    "Show all processes running inside a Docker container. Displays PID, user, and command for each process. Useful for understanding what's actually running in the container and debugging process-related issues.",
+    "Show all processes running inside a Docker container. Displays PID, user, and command for each process. Useful for understanding what's actually running in the container and debugging process-related issues. Supports comprehensive output filtering.",
     {
       container: z.string().describe("Container name or ID"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
-        const command = `docker top ${args.container}`;
+        let command = `docker top ${args.container}`;
+
+        // Apply filters
+        command = applyFilters(command, args);
 
         const output = await sshExecutor(command);
 
@@ -89,9 +98,11 @@ export function registerDockerAdvancedTools(
   // Tool 3: docker health check all - Health status of all containers
   server.tool(
     "docker health check all",
-    "Show health status of all Docker containers. Displays container name, running status, and health check status (if configured). Useful for quickly identifying unhealthy containers.",
-    {},
-    async () => {
+    "Show health status of all Docker containers. Displays container name, running status, and health check status (if configured). Useful for quickly identifying unhealthy containers. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         const command = "docker ps -a --format json";
 
@@ -131,11 +142,14 @@ export function registerDockerAdvancedTools(
           })
           .join("\n---\n\n");
 
+        // Apply filters to formatted text
+        const filtered = applyFiltersToText(`Container Health Status (${containers.length} containers):\n\n${healthInfo}`, args);
+
         return {
           content: [
             {
               type: "text",
-              text: `Container Health Status (${containers.length} containers):\n\n${healthInfo}`,
+              text: filtered,
             },
           ],
         };
@@ -156,14 +170,15 @@ export function registerDockerAdvancedTools(
   // Tool 4: docker logs aggregate - Search logs across multiple containers
   server.tool(
     "docker logs aggregate",
-    "Search for a pattern across logs of all running containers. Useful for finding which container is generating specific log messages or errors. Searches case-insensitively.",
+    "Search for a pattern across logs of all running containers. Useful for finding which container is generating specific log messages or errors. Searches case-insensitively. Supports comprehensive output filtering.",
     {
       pattern: z.string().describe("Pattern to search for in logs (case-insensitive grep)"),
-      tail: z.number().optional().default(100).describe("Number of log lines to check per container (default: 100)"),
+      lines: z.number().optional().default(100).describe("Number of log lines to check per container (default: 100)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
-        const tail = args.tail ?? 100;
+        const lines = args.lines ?? 100;
 
         // First, get list of running containers
         const listCommand = "docker ps --format '{{.Names}}'";
@@ -189,7 +204,7 @@ export function registerDockerAdvancedTools(
         const results: string[] = [];
         for (const container of containers) {
           try {
-            const logCommand = `docker logs --tail ${tail} ${container} 2>&1 | grep -i '${args.pattern}' || true`;
+            const logCommand = `docker logs --tail ${lines} ${container} 2>&1 | grep -i '${args.pattern}' || true`;
             const logOutput = await sshExecutor(logCommand);
 
             if (logOutput.trim()) {
@@ -201,22 +216,18 @@ export function registerDockerAdvancedTools(
           }
         }
 
-        if (results.length === 0) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `No matches found for pattern "${args.pattern}" in any container logs (searched ${containers.length} containers).`,
-              },
-            ],
-          };
-        }
+        const resultText = results.length === 0
+          ? `No matches found for pattern "${args.pattern}" in any container logs (searched ${containers.length} containers).`
+          : `Log Search Results for "${args.pattern}" (found in ${results.length} of ${containers.length} containers):\n\n${results.join("\n")}`;
+
+        // Apply filters to result
+        const filtered = applyFiltersToText(resultText, args);
 
         return {
           content: [
             {
               type: "text",
-              text: `Log Search Results for "${args.pattern}" (found in ${results.length} of ${containers.length} containers):\n\n${results.join("\n")}`,
+              text: filtered,
             },
           ],
         };
@@ -237,12 +248,13 @@ export function registerDockerAdvancedTools(
   // Tool 5: docker compose ps - Show docker compose stack status
   server.tool(
     "docker compose ps",
-    "Show status of containers that are part of a Docker Compose stack. If a compose file path is provided, it will check that specific stack. Otherwise, it attempts to find compose-managed containers.",
+    "Show status of containers that are part of a Docker Compose stack. If a compose file path is provided, it will check that specific stack. Otherwise, it attempts to find compose-managed containers. Supports comprehensive output filtering.",
     {
       composeFile: z
         .string()
         .optional()
         .describe("Optional path to docker-compose.yml file. If provided, will check if file exists and show containers from that stack."),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -297,11 +309,14 @@ export function registerDockerAdvancedTools(
             )
             .join("\n---\n\n");
 
+          const fullText = `Docker Compose Stack - ${args.composeFile} (${containers.length} containers):\n\n${formatted}`;
+          const filtered = applyFiltersToText(fullText, args);
+
           return {
             content: [
               {
                 type: "text",
-                text: `Docker Compose Stack - ${args.composeFile} (${containers.length} containers):\n\n${formatted}`,
+                text: filtered,
               },
             ],
           };
@@ -336,11 +351,14 @@ export function registerDockerAdvancedTools(
             )
             .join("\n---\n\n");
 
+          const fullText = `Docker Compose Managed Containers (${containers.length}):\n\n${formatted}`;
+          const filtered = applyFiltersToText(fullText, args);
+
           return {
             content: [
               {
                 type: "text",
-                text: `Docker Compose Managed Containers (${containers.length}):\n\n${formatted}`,
+                text: filtered,
               },
             ],
           };
@@ -362,7 +380,7 @@ export function registerDockerAdvancedTools(
   // Tool 6: docker compose up - Start a docker compose stack
   server.tool(
     "docker compose up",
-    "Start a Docker Compose stack. Takes a directory path and runs 'docker compose up'. Optionally specify detached mode (default: true) and custom compose file name.",
+    "Start a Docker Compose stack. Takes a directory path and runs 'docker compose up'. Optionally specify detached mode (default: true) and custom compose file name. Supports comprehensive output filtering.",
     {
       path: z.string().describe("Directory path containing the docker-compose.yml file"),
       composeFile: z
@@ -375,6 +393,7 @@ export function registerDockerAdvancedTools(
         .optional()
         .default(true)
         .describe("Run in detached mode (default: true). Set to false to run in foreground."),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -416,7 +435,11 @@ export function registerDockerAdvancedTools(
 
         // Run docker compose up with or without -d flag
         const detachedFlag = detached ? " -d" : "";
-        const upCommand = `cd ${args.path} && docker compose -f ${composeFile} up${detachedFlag}`;
+        let upCommand = `cd ${args.path} && docker compose -f ${composeFile} up${detachedFlag}`;
+
+        // Apply filters
+        upCommand = applyFilters(upCommand, args);
+
         const output = await sshExecutor(upCommand);
 
         return {

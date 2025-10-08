@@ -361,14 +361,14 @@ Container app: running (started: 2025-01-15T14:30:12)`;
       expect(command).toContain("python3 -m json.tool");
     });
 
-    it("should respect custom tail parameter", async () => {
+    it("should respect custom lines parameter", async () => {
       const mockOutput = `2025-01-15 10:30:12 INFO: Line 1
 2025-01-15 10:30:13 INFO: Line 2`;
 
       mockSSHExecutor.mockResolvedValue(mockOutput);
 
       const tool = registeredTools.get("log parse docker logs");
-      const result = await tool.handler({ container: "nginx", tail: 50 });
+      const result = await tool.handler({ container: "nginx", lines: 50 });
 
       expect(mockSSHExecutor).toHaveBeenCalled();
       const command = mockSSHExecutor.mock.calls[0][0];
@@ -659,12 +659,12 @@ Container: nginx
       expect(tool.schema.hours._def.typeName).toBe("ZodDefault");
     });
 
-    it("parse_docker_logs should have container, jsonLines, and tail parameters", () => {
+    it("parse_docker_logs should have container, jsonLines, and lines parameters", () => {
       const tool = registeredTools.get("log parse docker logs");
       expect(tool.schema.container).toBeDefined();
       expect(tool.schema.jsonLines).toBeDefined();
-      expect(tool.schema.tail).toBeDefined();
-      expect(tool.schema.tail._def.typeName).toBe("ZodDefault");
+      expect(tool.schema.lines).toBeDefined();
+      expect(tool.schema.lines._def.typeName).toBe("ZodDefault");
     });
 
     it("compare_logs_timerange should have startTime and endTime parameters", () => {

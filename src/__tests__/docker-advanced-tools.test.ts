@@ -190,7 +190,7 @@ root                9999                0                   0                   
       mockSSHExecutor.mockResolvedValueOnce('Error: database connection failed'); // app3
 
       const tool = registeredTools.get('docker logs aggregate');
-      const result = await tool.handler({ pattern: 'error', tail: 50 });
+      const result = await tool.handler({ pattern: 'error', lines: 50 });
 
       expect(mockSSHExecutor).toHaveBeenCalledWith("docker ps --format '{{.Names}}'");
       expect(mockSSHExecutor).toHaveBeenCalledWith("docker logs --tail 50 app1 2>&1 | grep -i 'error' || true");

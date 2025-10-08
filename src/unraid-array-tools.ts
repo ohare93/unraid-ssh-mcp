@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { applyFilters, outputFiltersSchema } from "./filters.js";
 
 /**
  * SSH executor function type that executes commands on remote host
@@ -16,15 +17,19 @@ export function registerUnraidArrayTools(
   // Tool 1: unraid parity check status - Current/last parity check status
   server.tool(
     "unraid parity check status",
-    "Get current or last parity check status including progress percentage, speed, errors found, and estimated completion time. Shows real-time information if a parity check is in progress.",
-    {},
-    async () => {
+    "Get current or last parity check status including progress percentage, speed, errors found, and estimated completion time. Shows real-time information if a parity check is in progress. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         let output = "=== Parity Check Status ===\n\n";
 
         // Check /proc/mdcmd for current status
         try {
-          const mdcmd = await sshExecutor("cat /proc/mdcmd");
+          let command = "cat /proc/mdcmd";
+          command = applyFilters(command, args);
+          const mdcmd = await sshExecutor(command);
           const lines = mdcmd.split("\n");
 
           // Parse relevant fields
@@ -98,9 +103,10 @@ export function registerUnraidArrayTools(
   // Tool 2: unraid parity check history - Historical parity check results
   server.tool(
     "unraid parity check history",
-    "Get historical parity check results showing date, duration, errors found, and speed for the last N parity checks. Parses system logs to provide a complete history.",
+    "Get historical parity check results showing date, duration, errors found, and speed for the last N parity checks. Parses system logs to provide a complete history. Supports comprehensive output filtering.",
     {
       limit: z.number().int().positive().optional().default(5).describe("Number of historical checks to show (default: 5)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -109,7 +115,8 @@ export function registerUnraidArrayTools(
 
         // Search syslog and archived logs for parity check completions
         try {
-          const command = `(cat /var/log/syslog; zcat /var/log/syslog.*.gz 2>/dev/null) | grep -i 'parity.*\\(finish\\|complete\\|done\\|error\\)' | tail -n ${limit * 3}`;
+          let command = `(cat /var/log/syslog; zcat /var/log/syslog.*.gz 2>/dev/null) | grep -i 'parity.*\\(finish\\|complete\\|done\\|error\\)' | tail -n ${limit * 3}`;
+          command = applyFilters(command, args);
           const logs = await sshExecutor(command);
 
           if (logs.trim()) {
@@ -160,14 +167,18 @@ export function registerUnraidArrayTools(
   // Tool 3: unraid array sync status - Real-time array sync/rebuild
   server.tool(
     "unraid array sync status",
-    "Get real-time array synchronization or rebuild status. Shows progress, speed, and estimated time remaining for any ongoing sync operations.",
-    {},
-    async () => {
+    "Get real-time array synchronization or rebuild status. Shows progress, speed, and estimated time remaining for any ongoing sync operations. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         let output = "=== Array Sync/Rebuild Status ===\n\n";
 
         // Check /proc/mdcmd for sync status
-        const mdcmd = await sshExecutor("cat /proc/mdcmd | grep -E '(mdState|mdResyncPos|mdResync|mdResyncAction|mdResyncSize)'");
+        let command = "cat /proc/mdcmd | grep -E '(mdState|mdResyncPos|mdResync|mdResyncAction|mdResyncSize)'";
+        command = applyFilters(command, args);
+        const mdcmd = await sshExecutor(command);
 
         if (mdcmd.trim()) {
           output += "Current Status:\n";
@@ -220,14 +231,18 @@ export function registerUnraidArrayTools(
   // Tool 4: unraid disk spin status - Drive spin up/down status
   server.tool(
     "unraid disk spin status",
-    "Check the spin status of all drives (active/standby/sleeping). Useful for monitoring which drives are spun down to save power and reduce wear.",
-    {},
-    async () => {
+    "Check the spin status of all drives (active/standby/sleeping). Useful for monitoring which drives are spun down to save power and reduce wear. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         let output = "=== Disk Spin Status ===\n\n";
 
         // Get list of all sd* drives
-        const devices = await sshExecutor("ls -1 /dev/sd? 2>/dev/null || echo ''");
+        let command = "ls -1 /dev/sd? 2>/dev/null || echo ''";
+        command = applyFilters(command, args);
+        const devices = await sshExecutor(command);
         const deviceList = devices.trim().split("\n").filter(d => d.trim() && d.startsWith("/dev/"));
 
         if (deviceList.length === 0) {
@@ -291,15 +306,19 @@ export function registerUnraidArrayTools(
   // Tool 5: unraid unclean shutdown check - Check for unclean shutdowns
   server.tool(
     "unraid unclean shutdown check",
-    "Check for unclean shutdowns by examining boot logs and system markers. Helps identify potential data integrity issues from improper shutdowns.",
-    {},
-    async () => {
+    "Check for unclean shutdowns by examining boot logs and system markers. Helps identify potential data integrity issues from improper shutdowns. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         let output = "=== Unclean Shutdown Check ===\n\n";
 
         // Check for unclean shutdown markers
         try {
-          const uncleanMarker = await sshExecutor("test -f /boot/unclean_shutdown && echo 'UNCLEAN SHUTDOWN MARKER FOUND' || echo 'No unclean shutdown marker'");
+          let command = "test -f /boot/unclean_shutdown && echo 'UNCLEAN SHUTDOWN MARKER FOUND' || echo 'No unclean shutdown marker'";
+          command = applyFilters(command, args);
+          const uncleanMarker = await sshExecutor(command);
           output += uncleanMarker + "\n\n";
         } catch (error) {
           output += "Could not check for unclean shutdown marker\n\n";
@@ -361,15 +380,19 @@ export function registerUnraidArrayTools(
   // Tool 6: unraid mover status - Mover status and last run
   server.tool(
     "unraid mover status",
-    "Get mover status showing if it's currently running and when it last ran. The mover transfers files from cache to array disks.",
-    {},
-    async () => {
+    "Get mover status showing if it's currently running and when it last ran. The mover transfers files from cache to array disks. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         let output = "=== Mover Status ===\n\n";
 
         // Check if mover is currently running
         try {
-          const moverProcess = await sshExecutor("ps aux | grep -v grep | grep mover || echo ''");
+          let command = "ps aux | grep -v grep | grep mover || echo ''";
+          command = applyFilters(command, args);
+          const moverProcess = await sshExecutor(command);
           if (moverProcess.trim()) {
             output += "Status: RUNNING\n\n";
             output += "Process details:\n";
@@ -426,9 +449,10 @@ export function registerUnraidArrayTools(
   // Tool 7: unraid mover log - Read mover logs
   server.tool(
     "unraid mover log",
-    "Read recent mover logs showing file transfer activity. Shows which files were moved from cache to array disks.",
+    "Read recent mover logs showing file transfer activity. Shows which files were moved from cache to array disks. Supports comprehensive output filtering.",
     {
       lines: z.number().int().positive().optional().default(100).describe("Number of log lines to show (default: 100)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -436,7 +460,8 @@ export function registerUnraidArrayTools(
         let output = `=== Mover Log (Last ${lines} lines) ===\n\n`;
 
         // Extract mover entries from syslog
-        const command = `grep -i 'mover' /var/log/syslog | tail -n ${lines}`;
+        let command = `grep -i 'mover' /var/log/syslog | tail -n ${lines}`;
+        command = applyFilters(command, args);
         const logs = await sshExecutor(command);
 
         if (logs.trim()) {
@@ -471,15 +496,19 @@ export function registerUnraidArrayTools(
   // Tool 8: unraid cache usage - Cache disk usage
   server.tool(
     "unraid cache usage",
-    "Get cache disk usage and breakdown of what's stored on the cache. Shows total usage and size of each directory on cache.",
-    {},
-    async () => {
+    "Get cache disk usage and breakdown of what's stored on the cache. Shows total usage and size of each directory on cache. Supports comprehensive output filtering.",
+    {
+      ...outputFiltersSchema.shape,
+    },
+    async (args) => {
       try {
         let output = "=== Cache Disk Usage ===\n\n";
 
         // Overall cache usage
         try {
-          const cacheDF = await sshExecutor("df -h /mnt/cache 2>/dev/null || df -h /mnt/cache* 2>/dev/null || echo 'Cache not mounted'");
+          let command = "df -h /mnt/cache 2>/dev/null || df -h /mnt/cache* 2>/dev/null || echo 'Cache not mounted'";
+          command = applyFilters(command, args);
+          const cacheDF = await sshExecutor(command);
           output += "Cache filesystem:\n";
           output += cacheDF + "\n\n";
         } catch (error) {
@@ -531,9 +560,10 @@ export function registerUnraidArrayTools(
   // Tool 9: unraid check split level - Verify share split level configs
   server.tool(
     "unraid check split level",
-    "Verify share split level configurations. Split level controls how files are distributed across array disks. Can check a specific share or all shares.",
+    "Verify share split level configurations. Split level controls how files are distributed across array disks. Can check a specific share or all shares. Supports comprehensive output filtering.",
     {
       share: z.string().optional().describe("Specific share name to check (optional, checks all shares if not specified)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -544,7 +574,9 @@ export function registerUnraidArrayTools(
           output = `=== Split Level Config - ${args.share} ===\n\n`;
 
           try {
-            const shareConfig = await sshExecutor(`cat /boot/config/shares/${args.share}.cfg 2>/dev/null || echo 'Share config not found'`);
+            let command = `cat /boot/config/shares/${args.share}.cfg 2>/dev/null || echo 'Share config not found'`;
+            command = applyFilters(command, args);
+            const shareConfig = await sshExecutor(command);
 
             if (shareConfig.includes("Share config not found")) {
               output += `Configuration file not found for share: ${args.share}\n`;

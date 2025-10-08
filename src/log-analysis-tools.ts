@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { applyFilters, outputFiltersSchema } from "./filters.js";
 
 /**
  * SSH executor function type that executes commands on remote host
@@ -17,7 +18,7 @@ export function registerLogAnalysisTools(
   // Tool 1: log grep all logs - Search across all logs
   server.tool(
     "log grep all logs",
-    "Search across all system logs including syslog, docker container logs, and application logs in /var/log/. Aggregates results showing source and matches.",
+    "Search across all system logs including syslog, docker container logs, and application logs in /var/log/. Aggregates results showing source and matches. Supports comprehensive output filtering.",
     {
       pattern: z
         .string()
@@ -27,6 +28,7 @@ export function registerLogAnalysisTools(
         .optional()
         .default(false)
         .describe("Whether the search should be case-sensitive (default: false)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -36,7 +38,7 @@ export function registerLogAnalysisTools(
         // 1. Search syslog
         // 2. Search all docker container logs
         // 3. Search common application logs in /var/log/
-        const command = `
+        let command = `
           echo "=== SYSLOG ===" && \
           (grep ${grepFlags} "${args.pattern}" /var/log/syslog 2>/dev/null | tail -n 50 || echo "No matches in syslog") && \
           echo "" && \
@@ -56,6 +58,7 @@ export function registerLogAnalysisTools(
           done | head -n 100 || echo "No matches in application logs")
         `.replace(/\n/g, ' ');
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -83,7 +86,7 @@ export function registerLogAnalysisTools(
   // Tool 2: log error aggregator - Find and deduplicate errors
   server.tool(
     "log error aggregator",
-    "Find and deduplicate errors from logs in the last N hours. Searches for 'error', 'fail', 'exception', 'critical' patterns and groups identical errors with counts.",
+    "Find and deduplicate errors from logs in the last N hours. Searches for 'error', 'fail', 'exception', 'critical' patterns and groups identical errors with counts. Supports comprehensive output filtering.",
     {
       hours: z
         .number()
@@ -99,6 +102,7 @@ export function registerLogAnalysisTools(
         .optional()
         .default(1)
         .describe("Minimum occurrence count to include (default: 1)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -107,7 +111,7 @@ export function registerLogAnalysisTools(
 
         // Search for error patterns in syslog and docker logs
         // Use sort | uniq -c to deduplicate and count
-        const command = `
+        let command = `
           tmpfile=$(mktemp) && \
           (journalctl --since "${hours} hours ago" 2>/dev/null | grep -iE "(error|fail|exception|critical)" || true) >> "$tmpfile" && \
           (grep -iE "(error|fail|exception|critical)" /var/log/syslog 2>/dev/null | tail -n 1000 || true) >> "$tmpfile" && \
@@ -126,6 +130,7 @@ export function registerLogAnalysisTools(
           echo "Unique error patterns: $unique_errors"
         `.replace(/\n/g, ' ');
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -153,7 +158,7 @@ export function registerLogAnalysisTools(
   // Tool 3: log timeline - Timeline of significant events
   server.tool(
     "log timeline",
-    "Create a chronological timeline of significant events including container starts/stops, errors, array events, and mover runs in the last N hours.",
+    "Create a chronological timeline of significant events including container starts/stops, errors, array events, and mover runs in the last N hours. Supports comprehensive output filtering.",
     {
       hours: z
         .number()
@@ -162,13 +167,14 @@ export function registerLogAnalysisTools(
         .optional()
         .default(24)
         .describe("Number of hours to look back (default: 24)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
         const hours = args.hours ?? 24;
 
         // Extract significant events from various sources
-        const command = `
+        let command = `
           echo "=== TIMELINE OF SIGNIFICANT EVENTS (Last ${hours} hours) ===" && \
           echo "" && \
           tmpfile=$(mktemp) && \
@@ -187,6 +193,7 @@ export function registerLogAnalysisTools(
           rm -f "$tmpfile"
         `.replace(/\n/g, ' ');
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -214,7 +221,7 @@ export function registerLogAnalysisTools(
   // Tool 4: log parse docker logs - Parse structured logs
   server.tool(
     "log parse docker logs",
-    "Parse and pretty-print Docker container logs. Can detect and parse JSON-formatted logs for better readability.",
+    "Parse and pretty-print Docker container logs. Can detect and parse JSON-formatted logs for better readability. Supports comprehensive output filtering.",
     {
       container: z
         .string()
@@ -224,25 +231,26 @@ export function registerLogAnalysisTools(
         .optional()
         .default(false)
         .describe("Attempt to parse logs as JSON lines (default: false, auto-detect)"),
-      tail: z
+      lines: z
         .number()
         .int()
         .positive()
         .optional()
         .default(100)
         .describe("Number of log lines to retrieve (default: 100)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
-        const tail = args.tail ?? 100;
+        const lines = args.lines ?? 100;
 
         // First get the logs
-        let command = `docker logs --tail ${tail} "${args.container}" 2>&1`;
+        let command = `docker logs --tail ${lines} "${args.container}" 2>&1`;
 
         // If JSON parsing is requested or auto-detect, try to parse
         if (args.jsonLines) {
           command = `
-            docker logs --tail ${tail} "${args.container}" 2>&1 | \
+            docker logs --tail ${lines} "${args.container}" 2>&1 | \
             while IFS= read -r line; do \
               echo "$line" | python3 -m json.tool 2>/dev/null || echo "$line"; \
             done
@@ -250,7 +258,7 @@ export function registerLogAnalysisTools(
         } else {
           // Auto-detect JSON - check first line
           command = `
-            logs=$(docker logs --tail ${tail} "${args.container}" 2>&1) && \
+            logs=$(docker logs --tail ${lines} "${args.container}" 2>&1) && \
             first_line=$(echo "$logs" | head -n 1) && \
             if echo "$first_line" | python3 -c "import sys, json; json.loads(sys.stdin.read())" 2>/dev/null; then \
               echo "=== JSON LOGS DETECTED - Pretty-printing ===" && \
@@ -264,13 +272,14 @@ export function registerLogAnalysisTools(
           `.replace(/\n/g, ' ');
         }
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
           content: [
             {
               type: "text",
-              text: `Docker Logs for "${args.container}" (last ${tail} lines):\n\n${output}`,
+              text: `Docker Logs for "${args.container}" (last ${lines} lines):\n\n${output}`,
             },
           ],
         };
@@ -291,7 +300,7 @@ export function registerLogAnalysisTools(
   // Tool 5: log compare logs timerange - Events between times
   server.tool(
     "log compare logs timerange",
-    "Show all significant events that occurred between two specific times. Helps answer 'what happened between X and Y?' Uses journalctl and syslog.",
+    "Show all significant events that occurred between two specific times. Helps answer 'what happened between X and Y?' Uses journalctl and syslog. Supports comprehensive output filtering.",
     {
       startTime: z
         .string()
@@ -299,11 +308,12 @@ export function registerLogAnalysisTools(
       endTime: z
         .string()
         .describe("End time in format like '2025-01-15 11:30:00' or '5 minutes ago' or 'now'"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
         // Use journalctl for precise time range queries
-        const command = `
+        let command = `
           echo "=== EVENTS FROM ${args.startTime} TO ${args.endTime} ===" && \
           echo "" && \
           (journalctl --since "${args.startTime}" --until "${args.endTime}" --no-pager 2>/dev/null || \
@@ -321,6 +331,7 @@ export function registerLogAnalysisTools(
           done || echo "Could not retrieve container states")
         `.replace(/\n/g, ' ');
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {
@@ -348,7 +359,7 @@ export function registerLogAnalysisTools(
   // Tool 6: log container restart history - Recent container restarts
   server.tool(
     "log container restart history",
-    "Show which containers have restarted in the last N hours and why. Parses docker events and syslog for restart information.",
+    "Show which containers have restarted in the last N hours and why. Parses docker events and syslog for restart information. Supports comprehensive output filtering.",
     {
       hours: z
         .number()
@@ -357,12 +368,13 @@ export function registerLogAnalysisTools(
         .optional()
         .default(24)
         .describe("Number of hours to look back (default: 24)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
         const hours = args.hours ?? 24;
 
-        const command = `
+        let command = `
           echo "=== CONTAINER RESTART HISTORY (Last ${hours} hours) ===" && \
           echo "" && \
           echo "=== DOCKER EVENTS (Restarts) ===" && \
@@ -396,6 +408,7 @@ export function registerLogAnalysisTools(
           done | head -n 200)
         `.replace(/\n/g, ' ');
 
+        command = applyFilters(command, args);
         const output = await sshExecutor(command);
 
         return {

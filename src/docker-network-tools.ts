@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { applyFilters, outputFiltersSchema } from "./filters.js";
 
 /**
  * SSH executor function type that executes commands on remote host
@@ -16,9 +17,10 @@ export function registerDockerNetworkTools(
   // Tool 1: docker list networks - List all Docker networks
   server.tool(
     "docker list networks",
-    "List all Docker networks with their driver type and scope. Shows network ID, name, driver, and scope.",
+    "List all Docker networks with their driver type and scope. Shows network ID, name, driver, and scope. Supports comprehensive output filtering.",
     {
       filter: z.string().optional().describe("Filter networks by driver (e.g., bridge, host, overlay)"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -27,6 +29,9 @@ export function registerDockerNetworkTools(
         if (args.filter) {
           command += ` --filter driver=${args.filter}`;
         }
+
+        // Apply comprehensive filters
+        command = applyFilters(command, args);
 
         const output = await sshExecutor(command);
 
@@ -55,13 +60,18 @@ export function registerDockerNetworkTools(
   // Tool 2: docker inspect network - Get detailed network information
   server.tool(
     "docker inspect network",
-    "Get detailed information about a Docker network including connected containers, subnet, gateway, and configuration.",
+    "Get detailed information about a Docker network including connected containers, subnet, gateway, and configuration. Supports comprehensive output filtering.",
     {
       network: z.string().describe("Network name or ID"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
-        const command = `docker network inspect ${args.network}`;
+        let command = `docker network inspect ${args.network}`;
+
+        // Apply comprehensive filters
+        command = applyFilters(command, args);
+
         const output = await sshExecutor(command);
 
         // Pretty print the JSON output
@@ -93,9 +103,10 @@ export function registerDockerNetworkTools(
   // Tool 3: docker list volumes - List all Docker volumes
   server.tool(
     "docker list volumes",
-    "List all Docker volumes with their driver and mountpoint information.",
+    "List all Docker volumes with their driver and mountpoint information. Supports comprehensive output filtering.",
     {
       dangling: z.boolean().optional().describe("Show only dangling (unused) volumes"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
@@ -106,6 +117,9 @@ export function registerDockerNetworkTools(
         } else if (args.dangling === false) {
           command += " --filter dangling=false";
         }
+
+        // Apply comprehensive filters
+        command = applyFilters(command, args);
 
         const output = await sshExecutor(command);
 
@@ -134,13 +148,18 @@ export function registerDockerNetworkTools(
   // Tool 4: docker inspect volume - Get detailed volume information
   server.tool(
     "docker inspect volume",
-    "Get detailed information about a Docker volume including mountpoint, driver, labels, and options.",
+    "Get detailed information about a Docker volume including mountpoint, driver, labels, and options. Supports comprehensive output filtering.",
     {
       volume: z.string().describe("Volume name"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
-        const command = `docker volume inspect ${args.volume}`;
+        let command = `docker volume inspect ${args.volume}`;
+
+        // Apply comprehensive filters
+        command = applyFilters(command, args);
+
         const output = await sshExecutor(command);
 
         // Pretty print the JSON output
@@ -172,13 +191,18 @@ export function registerDockerNetworkTools(
   // Tool 5: docker network containers - Show containers connected to a network
   server.tool(
     "docker network containers",
-    "List all containers connected to a specific Docker network with their IP addresses.",
+    "List all containers connected to a specific Docker network with their IP addresses. Supports comprehensive output filtering.",
     {
       network: z.string().describe("Network name or ID"),
+      ...outputFiltersSchema.shape,
     },
     async (args) => {
       try {
-        const command = `docker network inspect ${args.network} --format '{{range $id, $container := .Containers}}{{$id}}: {{$container.Name}} ({{$container.IPv4Address}}){{println}}{{end}}'`;
+        let command = `docker network inspect ${args.network} --format '{{range $id, $container := .Containers}}{{$id}}: {{$container.Name}} ({{$container.IPv4Address}}){{println}}{{end}}'`;
+
+        // Apply comprehensive filters
+        command = applyFilters(command, args);
+
         const output = await sshExecutor(command);
 
         const result = output.trim() || "No containers connected to this network.";
