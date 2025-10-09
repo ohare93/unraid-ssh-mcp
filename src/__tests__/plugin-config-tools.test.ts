@@ -242,92 +242,6 @@ DESCRIPTION:Clean old logs
     });
   });
 
-  describe("plugin validate docker compose", () => {
-    it("should register validate_docker_compose tool", () => {
-      expect(registeredTools.has("plugin validate docker compose")).toBe(true);
-      const tool = registeredTools.get("plugin validate docker compose")!;
-      expect(tool.description).toContain("Validate a Docker Compose file");
-    });
-
-    it("should validate valid compose file", async () => {
-      const validationOutput = `=== File Content ===
-version: '3.8'
-services:
-  web:
-    image: nginx
-    ports:
-      - "8080:80"
-
-=== Validation ===
-✓ YAML syntax is valid
-
-=== Structure Check ===
-✓ 'services' section found
-⚠ 'networks' section not found (optional)
-⚠ 'volumes' section not found (optional)
-ℹ Compose file version: 3.8`;
-
-      mockSSHExecutor.mockResolvedValue(validationOutput);
-
-      const tool = registeredTools.get("plugin validate docker compose")!;
-      const result = await tool.handler({
-        composePath: "/mnt/user/appdata/docker-compose.yml",
-      });
-
-      expect(result.content[0].text).toContain("YAML syntax is valid");
-      expect(result.content[0].text).toContain("'services' section found");
-      expect(result.content[0].text).toContain("Compose file version: 3.8");
-    });
-
-    it("should detect YAML syntax errors", async () => {
-      const errorOutput = `=== File Content ===
-version: '3.8'
-services:
-  web:
-    image: nginx
-    ports
-      - "8080:80"
-
-=== Validation ===
-✗ YAML syntax error detected
-
-=== Structure Check ===
-✓ 'services' section found`;
-
-      mockSSHExecutor.mockResolvedValue(errorOutput);
-
-      const tool = registeredTools.get("plugin validate docker compose")!;
-      const result = await tool.handler({
-        composePath: "/mnt/user/appdata/bad-compose.yml",
-      });
-
-      expect(result.content[0].text).toContain("YAML syntax error detected");
-    });
-
-    it("should handle file not found", async () => {
-      mockSSHExecutor.mockResolvedValue("ERROR: File not found: /path/to/compose.yml");
-
-      const tool = registeredTools.get("plugin validate docker compose")!;
-      const result = await tool.handler({
-        composePath: "/path/to/compose.yml",
-      });
-
-      expect(result.content[0].text).toContain("File not found");
-    });
-
-    it("should handle SSH errors", async () => {
-      mockSSHExecutor.mockRejectedValue(new Error("Validation failed"));
-
-      const tool = registeredTools.get("plugin validate docker compose")!;
-      const result = await tool.handler({
-        composePath: "/mnt/user/appdata/compose.yml",
-      });
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Failed to validate Docker Compose file");
-    });
-  });
-
   describe("plugin check share config", () => {
     it("should register check_share_config tool", () => {
       expect(registeredTools.has("plugin check share config")).toBe(true);
@@ -577,13 +491,12 @@ Total files modified: 0`);
   });
 
   describe("Tool Registration", () => {
-    it("should register all 8 tools", () => {
-      expect(registeredTools.size).toBe(8);
+    it("should register all 7 tools", () => {
+      expect(registeredTools.size).toBe(7);
       expect(registeredTools.has("plugin list plugins")).toBe(true);
       expect(registeredTools.has("plugin check plugin updates")).toBe(true);
       expect(registeredTools.has("plugin read docker template")).toBe(true);
       expect(registeredTools.has("plugin list user scripts")).toBe(true);
-      expect(registeredTools.has("plugin validate docker compose")).toBe(true);
       expect(registeredTools.has("plugin check share config")).toBe(true);
       expect(registeredTools.has("plugin check disk assignments")).toBe(true);
       expect(registeredTools.has("plugin find recent changes")).toBe(true);
@@ -605,10 +518,6 @@ Total files modified: 0`);
       // list_user_scripts - no parameters
       const listScripts = registeredTools.get("plugin list user scripts")!;
       expect(listScripts.schema).toBeDefined();
-
-      // validate_docker_compose - requires composePath
-      const validateCompose = registeredTools.get("plugin validate docker compose")!;
-      expect(validateCompose.schema.composePath).toBeDefined();
 
       // check_share_config - optional share parameter
       const checkShare = registeredTools.get("plugin check share config")!;

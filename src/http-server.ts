@@ -65,7 +65,8 @@ const oauthTokens = new Map<string, any>();
 const authorizationCodes = new Map<string, any>();
 
 // OAuth mock implementation
-const OAUTH_SERVER_URL = process.env.OAUTH_SERVER_URL || "https://mcp.munchohare.com";
+// OAUTH_SERVER_URL should be set in production - this default is for local testing only
+const OAUTH_SERVER_URL = process.env.OAUTH_SERVER_URL || "http://localhost:8080";
 const MOCK_TOKEN = process.env.MOCK_TOKEN || "mcp-unraid-access-token";
 
 /**
@@ -120,7 +121,7 @@ async function main() {
   log.info("Initializing MCP server...");
   const server = new McpServer({
     name: "ssh-unraid-server-http",
-    version: "1.2.1",
+    version: "1.0.0",
   });
 
   // Create SSH executor adapter for tool modules
@@ -310,7 +311,7 @@ async function main() {
       status,
       ssh_connected: isSSHConnected,
       server: "mcp-ssh-unraid",
-      version: "1.2.1",
+      version: "1.0.0",
       transport: "http",
       oauth: "enabled",
     });

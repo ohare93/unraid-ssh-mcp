@@ -65,7 +65,7 @@ describe('HTTP Server', () => {
     const data = await response.json() as Record<string, any>;
     expect(data).toHaveProperty('status');
     expect(data).toHaveProperty('server', 'mcp-ssh-unraid');
-    expect(data).toHaveProperty('version', '1.2.1');
+    expect(data).toHaveProperty('version', '1.0.0');
     expect(data).toHaveProperty('transport', 'http');
     expect(data).toHaveProperty('ssh_connected');
 

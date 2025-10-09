@@ -7,6 +7,9 @@ dist/
 # Environment variables
 .env
 
+# Local MCP configuration
+mcp-config.json
+
 # Logs
 *.log
 logs/

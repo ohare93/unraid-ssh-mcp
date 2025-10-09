@@ -1,0 +1,14 @@
+{
+  "type": "stdio",
+  "command": "podman",
+  "args": [
+    "run",
+    "--rm",
+    "-i",
+    "--env-file",
+    "/path/to/your/mcp-ssh-unraid/.env",
+    "-v",
+    "/path/to/your/ssh/key:/home/mcp/.ssh/id_rsa:ro,z",
+    "your-registry/mcp-ssh-unraid:latest"
+  ]
+}

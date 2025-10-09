@@ -16,7 +16,7 @@ Instead of manually running `docker logs`, `smartctl`, `docker inspect`, parsing
 
 ## Features
 
-- **86 specialized tools** for comprehensive Unraid server management through natural language
+- **82 specialized tools** for comprehensive Unraid server management through natural language
 - **Dual transport modes** - Run via stdio (local) or HTTP/SSE (network-accessible)
 - **Read-only by design** - Zero risk of accidental system modifications
 - **Docker container management** - Inspect, logs, stats, environment variables, port mappings, network topology, and inter-container communication testing
@@ -79,6 +79,12 @@ Add to your MCP client configuration (e.g., Claude Desktop):
   }
 }
 ```
+
+**Configuration Examples:**
+- `mcp-config.json.example` - HTTP/SSE transport (recommended for remote access)
+- `mcp-config.stdio.example` - stdio transport for local development
+
+For HTTP mode configuration, see the [HTTP/SSE Mode](#httpsse-mode-network-accessible) section below.
 
 ## Security Setup
 
@@ -164,8 +170,10 @@ docker-compose -f docker-compose.http.yml up -d
 In addition to the SSH configuration variables, HTTP mode supports:
 
 ```bash
-HTTP_PORT=3000           # Port for HTTP server (default: 3000)
-CORS_ORIGIN=*            # CORS origin (default: *, allows all origins)
+HTTP_PORT=3000                            # Port for HTTP server (default: 3000)
+CORS_ORIGIN=*                             # CORS origin (default: *, allows all origins)
+OAUTH_SERVER_URL=http://localhost:8080    # OAuth server URL (optional, for OAuth-enabled clients)
+MOCK_TOKEN=mcp-unraid-access-token        # Mock token for testing (optional)
 ```
 
 #### Accessing the HTTP Server
