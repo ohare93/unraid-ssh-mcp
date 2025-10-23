@@ -121,7 +121,7 @@ async function main() {
   log.info("Initializing MCP server...");
   const server = new McpServer({
     name: "ssh-unraid-server-http",
-    version: "1.0.0",
+    version: "1.1.0",
   });
 
   // Create SSH executor adapter for tool modules
@@ -311,7 +311,7 @@ async function main() {
       status,
       ssh_connected: isSSHConnected,
       server: "mcp-ssh-unraid",
-      version: "1.0.0",
+      version: "1.1.0",
       transport: "http",
       oauth: "enabled",
     });

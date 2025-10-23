@@ -18,6 +18,10 @@ export class SSHConnectionManager {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private baseBackoffMs: number = 1000;
+  private commandTimeoutMs: number;
+  private maxConsecutiveFailures: number;
+  private consecutiveFailures: number = 0;
+  private circuitBreakerOpen: boolean = false;
 
   constructor() {
     this.ssh = new NodeSSH();
@@ -46,6 +50,14 @@ export class SSHConnectionManager {
       privateKeyPath,
       password,
     };
+
+    // Load timeout and circuit breaker configuration
+    this.commandTimeoutMs = process.env.COMMAND_TIMEOUT_MS
+      ? parseInt(process.env.COMMAND_TIMEOUT_MS)
+      : 15000; // Default: 15 seconds
+    this.maxConsecutiveFailures = process.env.MAX_CONSECUTIVE_FAILURES
+      ? parseInt(process.env.MAX_CONSECUTIVE_FAILURES)
+      : 3; // Default: 3 consecutive failures
   }
 
   /**
@@ -93,15 +105,44 @@ export class SSHConnectionManager {
   }
 
   /**
-   * Execute command via SSH
+   * Execute command via SSH with timeout and circuit breaker protection
    */
   async executeCommand(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    // Check circuit breaker
+    if (this.circuitBreakerOpen) {
+      throw new Error(
+        `Circuit breaker is open after ${this.consecutiveFailures} consecutive failures. ` +
+        `Please check server health or restart the MCP server to reset.`
+      );
+    }
+
+    // Timeout ID for cleanup
+    let timeoutId: NodeJS.Timeout | null = null;
+
     try {
       if (!this.connected) {
         await this.connect();
       }
 
-      const result = await this.ssh.execCommand(command);
+      // Create a timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`TIMEOUT: Command timed out after ${this.commandTimeoutMs}ms`));
+        }, this.commandTimeoutMs);
+      });
+
+      // Race between command execution and timeout
+      const result = await Promise.race([
+        this.ssh.execCommand(command),
+        timeoutPromise,
+      ]);
+
+      // Clear timeout on success
+      if (timeoutId) clearTimeout(timeoutId);
+
+      // Reset circuit breaker on successful command
+      this.consecutiveFailures = 0;
+      this.circuitBreakerOpen = false;
 
       return {
         stdout: result.stdout,
@@ -109,20 +150,44 @@ export class SSHConnectionManager {
         exitCode: result.code ?? 0,
       };
     } catch (error) {
-      // Attempt to reconnect on connection errors
-      if (error instanceof Error && error.message.includes("connection")) {
-        this.connected = false;
-        await this.reconnect();
-        // Retry the command after reconnection
-        const result = await this.ssh.execCommand(command);
-        return {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.code ?? 0,
-        };
+      // Clear timeout on error
+      if (timeoutId) clearTimeout(timeoutId);
+
+      // Increment failure counter
+      this.consecutiveFailures++;
+
+      // Open circuit breaker if threshold reached
+      if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+        this.circuitBreakerOpen = true;
+        console.error(
+          `Circuit breaker opened after ${this.consecutiveFailures} consecutive failures. ` +
+          `Future commands will fail immediately until the MCP server is restarted.`
+        );
       }
 
-      throw new Error(`Failed to execute command: ${error instanceof Error ? error.message : String(error)}`);
+      // Determine error type for better error messages
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isTimeout = errorMessage.includes("TIMEOUT:");
+      const isConnection = errorMessage.toLowerCase().includes("connection");
+
+      if (isTimeout) {
+        throw new Error(
+          `Command timed out after ${this.commandTimeoutMs}ms. ` +
+          `The command may be hung or taking too long. ` +
+          `Consider increasing COMMAND_TIMEOUT_MS if this is a long-running operation.`
+        );
+      }
+
+      if (isConnection) {
+        this.connected = false;
+        throw new Error(
+          `SSH connection lost: ${errorMessage}. ` +
+          `The MCP server will attempt to reconnect on the next command. ` +
+          `If this persists, check your network connection and SSH credentials.`
+        );
+      }
+
+      throw new Error(`Failed to execute command: ${errorMessage}`);
     }
   }
 
