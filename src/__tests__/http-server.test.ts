@@ -65,7 +65,7 @@ describe('HTTP Server', () => {
     const data = await response.json() as Record<string, any>;
     expect(data).toHaveProperty('status');
     expect(data).toHaveProperty('server', 'mcp-ssh-unraid');
-    expect(data).toHaveProperty('version', '1.0.0');
+    expect(data).toHaveProperty('version', '1.1.0');
     expect(data).toHaveProperty('transport', 'http');
     expect(data).toHaveProperty('ssh_connected');
 
@@ -91,7 +91,7 @@ describe('HTTP Server', () => {
           capabilities: {},
           clientInfo: {
             name: 'test-client',
-            version: '1.0.0',
+            version: '1.1.0',
           },
         },
         id: 1,
@@ -116,5 +116,147 @@ describe('HTTP Server', () => {
   it('should return 404 for unknown endpoints', async () => {
     const response = await fetch(`${serverUrl}/unknown-endpoint`);
     expect(response.status).toBe(404);
+  });
+});
+
+describe('OAuth Authentication Enforcement', () => {
+  let authServerProcess: ChildProcess;
+  const authPort = 3998;
+  const authServerUrl = `http://localhost:${authPort}`;
+  let clientId: string;
+  let clientSecret: string;
+  let accessToken: string;
+
+  beforeAll(async () => {
+    // Start server with REQUIRE_AUTH=true
+    authServerProcess = spawn('tsx', ['src/http-server.ts'], {
+      env: {
+        ...process.env,
+        HTTP_PORT: authPort.toString(),
+        REQUIRE_AUTH: 'true',
+        SSH_HOST: 'test-host',
+        SSH_USERNAME: 'test-user',
+        SSH_PASSWORD: 'test-password',
+        NODE_ENV: 'test',
+      },
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Auth server start timeout')), 10000);
+      authServerProcess.stderr?.on('data', (data: Buffer) => {
+        if (data.toString().includes(`listening on port ${authPort}`)) {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    });
+
+    // Register a client
+    const registerResponse = await fetch(`${authServerUrl}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_name: 'Test Client' }),
+    });
+    const clientData = await registerResponse.json() as Record<string, any>;
+    clientId = clientData.client_id;
+    clientSecret = clientData.client_secret;
+
+    // Get access token - don't follow redirects to extract code
+    const authResponse = await fetch(`${authServerUrl}/authorize?client_id=${clientId}&redirect_uri=http://localhost:9999/callback&state=test&response_type=code`, {
+      redirect: 'manual'
+    });
+
+    // Extract code from Location header
+    const locationHeader = authResponse.headers.get('location');
+    if (!locationHeader) {
+      throw new Error('No redirect location in authorize response');
+    }
+    const code = new URL(locationHeader).searchParams.get('code');
+    if (!code) {
+      throw new Error('No authorization code in redirect URL');
+    }
+
+    const tokenResponse = await fetch(`${authServerUrl}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: 'http://localhost:9999/callback',
+      }),
+    });
+    const tokenData = await tokenResponse.json() as Record<string, any>;
+    accessToken = tokenData.access_token;
+  });
+
+  afterAll(async () => {
+    if (authServerProcess) {
+      authServerProcess.kill('SIGTERM');
+      await new Promise<void>((resolve) => {
+        authServerProcess.on('exit', () => resolve());
+        setTimeout(() => { authServerProcess.kill('SIGKILL'); resolve(); }, 2000);
+      });
+    }
+  });
+
+  it('should reject MCP requests without token', async () => {
+    const response = await fetch(`${authServerUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'tools/list',
+        id: 1,
+      }),
+    });
+
+    expect(response.status).toBe(401);
+    const data = await response.json() as Record<string, any>;
+    expect(data.error).toBeDefined();
+    expect(data.error.message).toContain('Authentication required');
+  });
+
+  it('should reject MCP requests with invalid token', async () => {
+    const response = await fetch(`${authServerUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer invalid-token-12345',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'tools/list',
+        id: 1,
+      }),
+    });
+
+    expect(response.status).toBe(401);
+    const data = await response.json() as Record<string, any>;
+    expect(data.error.message).toContain('Authentication required');
+  });
+
+  it('should allow MCP requests with valid token', async () => {
+    const response = await fetch(`${authServerUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'tools/list',
+        id: 1,
+      }),
+    });
+
+    expect(response.status).not.toBe(401);
+    expect(response.status).toBeLessThan(500);
   });
 });

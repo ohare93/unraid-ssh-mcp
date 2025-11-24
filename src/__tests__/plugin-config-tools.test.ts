@@ -31,7 +31,7 @@ describe("Plugin Config Tools", () => {
     it("should register list_plugins tool", () => {
       expect(registeredTools.has("plugin list plugins")).toBe(true);
       const tool = registeredTools.get("plugin list plugins")!;
-      expect(tool.description).toContain("List all installed Unraid plugins");
+      expect(tool.description).toContain("List installed Unraid plugins");
     });
 
     it("should list plugins with versions", async () => {
@@ -75,7 +75,7 @@ dockerMan|2023.10.20|/boot/config/plugins/dockerMan/dockerMan.plg`;
     it("should register check_plugin_updates tool", () => {
       expect(registeredTools.has("plugin check plugin updates")).toBe(true);
       const tool = registeredTools.get("plugin check plugin updates")!;
-      expect(tool.description).toContain("Check for available plugin updates");
+      expect(tool.description).toContain("plugin update");
     });
 
     it("should list plugin update information", async () => {
@@ -120,7 +120,7 @@ dockerMan|2023.10.20|none`;
     it("should register read_docker_template tool", () => {
       expect(registeredTools.has("plugin read docker template")).toBe(true);
       const tool = registeredTools.get("plugin read docker template")!;
-      expect(tool.description).toContain("Read and parse a Docker template XML");
+      expect(tool.description).toContain("Docker template XML");
     });
 
     it("should read template file", async () => {
@@ -183,7 +183,7 @@ pihole.xml`;
     it("should register list_user_scripts tool", () => {
       expect(registeredTools.has("plugin list user scripts")).toBe(true);
       const tool = registeredTools.get("plugin list user scripts")!;
-      expect(tool.description).toContain("List all user scripts");
+      expect(tool.description).toContain("user scripts");
     });
 
     it("should list user scripts with details", async () => {
@@ -352,7 +352,7 @@ shareAllocator=invalid
     it("should register check_disk_assignments tool", () => {
       expect(registeredTools.has("plugin check disk assignments")).toBe(true);
       const tool = registeredTools.get("plugin check disk assignments")!;
-      expect(tool.description).toContain("Verify disk assignments");
+      expect(tool.description).toContain("disk assignments");
     });
 
     it("should show disk assignments", async () => {
@@ -404,7 +404,7 @@ Cache Disks: 1`;
     it("should register find_recent_changes tool", () => {
       expect(registeredTools.has("plugin find recent changes")).toBe(true);
       const tool = registeredTools.get("plugin find recent changes")!;
-      expect(tool.description).toContain("Find recently modified configuration files");
+      expect(tool.description).toContain("recently modified config files");
     });
 
     it("should find files modified in last 24 hours", async () => {

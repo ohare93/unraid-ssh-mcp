@@ -18,6 +18,7 @@ import { registerPerformanceSecurityTools } from "./performance-security-tools.j
 import { registerLogAnalysisTools } from "./log-analysis-tools.js";
 import { registerResourceManagementTools } from "./resource-management-tools.js";
 import { registerHealthDiagnosticsTools } from "./health-diagnostics-tools.js";
+import { authenticateRequest } from './middleware/auth.js';
 import crypto from "crypto";
 
 // ANSI color codes for logging
@@ -68,6 +69,20 @@ const authorizationCodes = new Map<string, any>();
 // OAUTH_SERVER_URL should be set in production - this default is for local testing only
 const OAUTH_SERVER_URL = process.env.OAUTH_SERVER_URL || "http://localhost:8080";
 const MOCK_TOKEN = process.env.MOCK_TOKEN || "mcp-unraid-access-token";
+
+// Read and validate REQUIRE_AUTH environment variable
+const requireAuthValue = process.env.REQUIRE_AUTH || "true";
+const validAuthValues = ["true", "false", "development"];
+
+if (!validAuthValues.includes(requireAuthValue)) {
+  console.error(`❌ Invalid REQUIRE_AUTH value: "${requireAuthValue}"`);
+  console.error(`   Must be one of: ${validAuthValues.join(", ")}`);
+  process.exit(1);
+}
+
+const REQUIRE_AUTH = requireAuthValue === "true" ? true
+                    : requireAuthValue === "false" ? false
+                    : "development" as const;
 
 /**
  * HTTP MCP Server with OAuth Support
@@ -121,7 +136,7 @@ async function main() {
   log.info("Initializing MCP server...");
   const server = new McpServer({
     name: "ssh-unraid-server-http",
-    version: "1.0.0",
+    version: "1.1.0",
   });
 
   // Create SSH executor adapter for tool modules
@@ -311,33 +326,39 @@ async function main() {
       status,
       ssh_connected: isSSHConnected,
       server: "mcp-ssh-unraid",
-      version: "1.0.0",
+      version: "1.1.0",
       transport: "http",
       oauth: "enabled",
     });
   });
 
-  // MCP endpoint with optional OAuth validation
+  // MCP endpoint with OAuth authentication enforcement
   app.post("/mcp", async (req: Request, res: Response) => {
     try {
-      // Optional: Check for Authorization header
-      const authHeader = req.headers.authorization;
-      if (authHeader) {
-        const token = authHeader.replace("Bearer ", "");
-        const tokenData = oauthTokens.get(token);
+      // Authenticate the request
+      const authResult = authenticateRequest(req, oauthTokens, REQUIRE_AUTH);
 
-        if (tokenData) {
-          if (tokenData.expires_at < Date.now()) {
-            log.warn("Expired token used for MCP request");
-            oauthTokens.delete(token);
-            return res.status(401).json({ error: "token_expired" });
-          }
-          log.mcp(`Authenticated MCP request from client: ${tokenData.client_id}`);
-        } else {
-          log.warn("Invalid token used for MCP request");
-        }
+      // Enforce authentication if required
+      if (REQUIRE_AUTH === true && !authResult.authenticated) {
+        log.warn(`🔒 Unauthorized MCP request blocked: ${authResult.error}`);
+        return res.status(401).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32001,
+            message: "Authentication required",
+            data: authResult.error
+          },
+          id: req.body?.id || null
+        });
+      }
+
+      // Log authentication status
+      if (authResult.authenticated) {
+        log.mcp(`✅ Authenticated MCP request from client: ${authResult.clientId}`);
+      } else if (REQUIRE_AUTH === "development") {
+        log.warn(`⚠️  DEVELOPMENT MODE: Allowing unauthenticated MCP request`);
       } else {
-        log.mcp("Unauthenticated MCP request (no token provided)");
+        log.mcp(`ℹ️  Unauthenticated MCP request (REQUIRE_AUTH=false)`);
       }
 
       // Log MCP method if available
@@ -387,6 +408,23 @@ async function main() {
     log.info(`MCP endpoint: http://localhost:${port}/mcp`);
     log.info(`OAuth discovery: http://localhost:${port}/.well-known/oauth-authorization-server/mcp`);
     log.success("Server ready!");
+
+    // Security mode logging
+    console.log("\n" + "=".repeat(80));
+    if (REQUIRE_AUTH === true) {
+      log.success("🔒 SECURITY: OAuth authentication is REQUIRED");
+      log.info("   All MCP requests must include a valid Bearer token");
+      log.info("   Register clients: POST http://localhost:" + port + "/register");
+    } else if (REQUIRE_AUTH === false) {
+      log.warn("🚨 WARNING: OAuth authentication is DISABLED");
+      log.warn("   Anyone can access the MCP endpoint without authentication!");
+      log.warn("   This mode should ONLY be used for local development");
+      log.warn("   NEVER expose this server to the internet with REQUIRE_AUTH=false");
+    } else {
+      log.warn("⚠️  DEVELOPMENT MODE: Authentication warnings enabled");
+      log.warn("   Unauthenticated requests will be logged but allowed");
+    }
+    console.log("=".repeat(80) + "\n");
   });
 }
 

@@ -33,10 +33,10 @@ describe("Performance and Security Tools", () => {
 
     it("should register tools with correct descriptions", () => {
       expect(registeredTools.get("performance identify bottleneck").description).toContain("bottleneck");
-      expect(registeredTools.get("performance network bandwidth by container").description).toContain("network bandwidth");
+      expect(registeredTools.get("performance network bandwidth by container").description).toContain("network I/O");
       expect(registeredTools.get("performance track metric over time").description).toContain("time series");
-      expect(registeredTools.get("security check open ports").description).toContain("open ports");
-      expect(registeredTools.get("security audit container privileges").description).toContain("privileges");
+      expect(registeredTools.get("security check open ports").description).toContain("TCP/UDP ports");
+      expect(registeredTools.get("security audit container privileges").description).toContain("privileged");
       expect(registeredTools.get("security check ssh connections").description).toContain("SSH");
       expect(registeredTools.get("security check cert expiry").description).toContain("certificate");
     });

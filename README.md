@@ -7,6 +7,7 @@ A Model Context Protocol (MCP) server that provides secure, read-only SSH access
 Managing an Unraid server often involves SSH-ing in, running multiple commands, correlating logs, and interpreting system metrics. This MCP server enables AI assistants to do that work for you using natural language.
 
 **Ask questions like:**
+
 - "Why is my Plex container crashing?"
 - "Is my array healthy and are there any drives showing signs of failure?"
 - "Which containers are consuming the most resources and why?"
@@ -22,20 +23,20 @@ Unraid 7.2+ includes a [GraphQL API](https://docs.unraid.net/API/), so you might
 
 The Unraid GraphQL API is still evolving and has documented limitations:
 
-| Feature | API | SSH |
-|---------|-----|-----|
-| Docker container logs | ❌ | ✅ |
-| SMART disk health data | ❌ | ✅ |
-| Real-time CPU usage/load averages | ❌ | ✅ |
-| Network bandwidth monitoring | ❌ | ✅ |
-| Disk spin status | ❌ | ✅ |
-| Process monitoring (ps/top) | ❌ | ✅ |
-| Log file analysis | ❌ | ✅ |
-| VM management (libvirt/virsh) | ❌ | ✅ |
-| GPU monitoring | ❌ | ✅ |
-| UPS status | ❌ | ✅ |
-| User scripts | ❌ | ✅ |
-| Security auditing (open ports, SSH sessions) | ❌ | ✅ |
+| Feature                                      | API | SSH |
+| -------------------------------------------- | --- | --- |
+| Docker container logs                        | ❌  | ✅  |
+| SMART disk health data                       | ❌  | ✅  |
+| Real-time CPU usage/load averages            | ❌  | ✅  |
+| Network bandwidth monitoring                 | ❌  | ✅  |
+| Disk spin status                             | ❌  | ✅  |
+| Process monitoring (ps/top)                  | ❌  | ✅  |
+| Log file analysis                            | ❌  | ✅  |
+| VM management (libvirt/virsh)                | ❌  | ✅  |
+| GPU monitoring                               | ❌  | ✅  |
+| UPS status                                   | ❌  | ✅  |
+| User scripts                                 | ❌  | ✅  |
+| Security auditing (open ports, SSH sessions) | ❌  | ✅  |
 
 Additionally, the API has a [known 32-bit integer overflow](https://github.com/domalab/ha-unraid-connect/issues/8) affecting memory monitoring on systems with >4GB RAM.
 
@@ -53,10 +54,10 @@ With SSH, this project provides **82 specialized tools** that can:
 
 ### Compatibility
 
-| Approach | Unraid Version | Rate Limits |
-|----------|----------------|-------------|
-| GraphQL API | 7.2+ only (or Connect plugin) | Yes |
-| SSH | All versions | No |
+| Approach    | Unraid Version                | Rate Limits |
+| ----------- | ----------------------------- | ----------- |
+| GraphQL API | 7.2+ only (or Connect plugin) | Yes         |
+| SSH         | All versions                  | No          |
 
 ### The Bottom Line
 
@@ -129,10 +130,73 @@ Add to your MCP client configuration (e.g., Claude Desktop):
 ```
 
 **Configuration Examples:**
+
 - `mcp-config.json.example` - HTTP/SSE transport (recommended for remote access)
 - `mcp-config.stdio.example` - stdio transport for local development
 
 For HTTP mode configuration, see the [HTTP/SSE Mode](#httpsse-mode-network-accessible) section below.
+
+## 🔒 Securing Your Deployment
+
+### Authentication (Required by Default)
+
+OAuth authentication is **REQUIRED by default** in v1.1.0+.
+
+Configure via `REQUIRE_AUTH` environment variable:
+
+| Value            | Use Case                                   |
+| ---------------- | ------------------------------------------ |
+| `true` (default) | ✅ Production - require OAuth token        |
+| `false`          | ⚠️ Local dev only - allows unauthenticated |
+| `development`    | ⚠️ Local dev - logs warnings               |
+
+**Never set `REQUIRE_AUTH=false` in production!**
+
+### OAuth Setup
+
+1. Register client:
+
+   ```bash
+   curl -X POST http://localhost:3000/register \
+     -H "Content-Type: application/json" \
+     -d '{"client_name": "My Client"}'
+   ```
+
+2. Get authorization code:
+
+   ```bash
+   # Visit in browser:
+   http://localhost:3000/authorize?client_id=YOUR_ID&redirect_uri=YOUR_REDIRECT&state=xyz&response_type=code
+   ```
+
+3. Exchange for token:
+
+   ```bash
+   curl -X POST http://localhost:3000/token \
+     -d grant_type=authorization_code \
+     -d code=YOUR_CODE \
+     -d client_id=YOUR_ID \
+     -d client_secret=YOUR_SECRET
+   ```
+
+4. Use token:
+   ```bash
+   curl -X POST http://localhost:3000/mcp \
+     -H "Authorization: Bearer YOUR_TOKEN" \
+     -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+   ```
+
+### Network Security
+
+🚫 **DON'T:** Expose directly to internet
+✅ **DO:** Use VPN/Tailscale or reverse proxy with TLS
+
+### Security Checklist
+
+- [ ] `REQUIRE_AUTH=true` in production
+- [ ] Server behind firewall/VPN or reverse proxy
+- [ ] OAuth credentials stored securely
+- [ ] Logs monitored for unauthorized attempts
 
 ## Security Setup
 
@@ -184,6 +248,7 @@ npm run build
 ## Docker Deployment
 
 **Choose your deployment mode:**
+
 - **Stdio Mode**: Best for local development or when connecting directly from Claude Desktop on the same machine
 - **HTTP Mode**: Ideal for running on your Unraid server itself or when accessing from remote clients
 
