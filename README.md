@@ -285,9 +285,11 @@ In addition to the SSH configuration variables, HTTP mode supports:
 ```bash
 HTTP_PORT=3000                            # Port for HTTP server (default: 3000)
 CORS_ORIGIN=*                             # CORS origin (default: *, allows all origins)
-OAUTH_SERVER_URL=http://localhost:8080    # OAuth server URL (optional, for OAuth-enabled clients)
+OAUTH_SERVER_URL=https://mcp.example.com  # Public URL for OAuth discovery (REQUIRED for production)
 MOCK_TOKEN=mcp-unraid-access-token        # Mock token for testing (optional)
 ```
+
+> **Important:** When deploying behind a reverse proxy (Traefik, nginx, etc.), you **must** set `OAUTH_SERVER_URL` to your public URL (e.g., `https://mcp.example.com`). This URL is returned in OAuth discovery metadata endpoints. If not set correctly, OAuth clients will fail with a "protected resource does not match" error.
 
 #### Accessing the HTTP Server
 
