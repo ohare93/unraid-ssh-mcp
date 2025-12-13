@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerPerformanceTools } from '../performance-tools.js';
+import { registerPerformanceTools } from '../tools/core/performance-tools.js';
 
 describe('Performance Tools', () => {
   let mockServer: any;

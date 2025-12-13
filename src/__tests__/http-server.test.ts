@@ -23,11 +23,13 @@ describe('HTTP Server', () => {
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Server failed to start within timeout'));
-      }, 10000);
+      }, 30000); // Increased timeout for platform detection
 
+      let output = '';
       serverProcess.stderr?.on('data', (data: Buffer) => {
         const message = data.toString();
-        if (message.includes(`listening on port ${testPort}`)) {
+        output += message;
+        if (message.includes('Server ready!')) {
           clearTimeout(timeout);
           resolve();
         }
@@ -37,8 +39,15 @@ describe('HTTP Server', () => {
         clearTimeout(timeout);
         reject(error);
       });
+
+      serverProcess.on('exit', (code) => {
+        if (code !== 0 && code !== null) {
+          clearTimeout(timeout);
+          reject(new Error(`Server exited with code ${code}: ${output}`));
+        }
+      });
     });
-  });
+  }, 35000); // beforeAll timeout
 
   afterAll(async () => {
     // Stop the server
@@ -64,8 +73,8 @@ describe('HTTP Server', () => {
 
     const data = await response.json() as Record<string, any>;
     expect(data).toHaveProperty('status');
-    expect(data).toHaveProperty('server', 'mcp-ssh-unraid');
-    expect(data).toHaveProperty('version', '1.1.2');
+    expect(data).toHaveProperty('server', 'mcp-ssh-sre');
+    expect(data).toHaveProperty('version', '2.0.0');
     expect(data).toHaveProperty('transport', 'http');
     expect(data).toHaveProperty('ssh_connected');
 
@@ -142,11 +151,20 @@ describe('OAuth Authentication Enforcement', () => {
     });
 
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Auth server start timeout')), 10000);
+      const timeout = setTimeout(() => reject(new Error('Auth server start timeout')), 30000);
+      let output = '';
       authServerProcess.stderr?.on('data', (data: Buffer) => {
-        if (data.toString().includes(`listening on port ${authPort}`)) {
+        const message = data.toString();
+        output += message;
+        if (message.includes('Server ready!')) {
           clearTimeout(timeout);
           resolve();
+        }
+      });
+      authServerProcess.on('exit', (code) => {
+        if (code !== 0 && code !== null) {
+          clearTimeout(timeout);
+          reject(new Error(`Auth server exited with code ${code}: ${output}`));
         }
       });
     });

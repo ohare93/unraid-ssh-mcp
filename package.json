@@ -1,7 +1,7 @@
 {
-  "name": "mcp-ssh-unraid",
-  "version": "1.1.2",
-  "description": "MCP server for SSH access to Unraid",
+  "name": "mcp-ssh-sre",
+  "version": "2.0.0",
+  "description": "MCP server for SRE operations across multiple platforms via SSH",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
@@ -17,7 +17,12 @@
   "keywords": [
     "mcp",
     "ssh",
-    "unraid"
+    "sre",
+    "devops",
+    "unraid",
+    "linux",
+    "docker",
+    "monitoring"
   ],
   "author": "",
   "license": "ISC",

@@ -2,18 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import "dotenv/config";
 import { SSHConnectionManager } from "./ssh-manager.js";
-import { registerDockerTools } from "./docker-tools.js";
-import { registerSystemTools } from "./system-tools.js";
-import { registerUnraidTools } from "./unraid-tools.js";
-import { registerMonitoringTools } from "./monitoring-tools.js";
-import { registerVMTools } from "./vm-tools.js";
-import { registerContainerTopologyTools } from "./container-topology-tools.js";
-import { registerPluginConfigTools } from "./plugin-config-tools.js";
-import { registerPerformanceTools } from "./performance-tools.js";
-import { registerSecurityTools } from "./security-tools.js";
-import { registerLogAnalysisTools } from "./log-analysis-tools.js";
-import { registerResourceManagementTools } from "./resource-management-tools.js";
-import { registerHealthDiagnosticsTools } from "./health-diagnostics-tools.js";
+import { initializePlatforms, platformRegistry, Platform } from "./platforms/index.js";
+import { loadTools } from "./tool-loader.js";
 
 // Re-export for backward compatibility
 export { SSHConnectionManager };
@@ -27,41 +17,56 @@ async function main() {
 
   try {
     // Establish initial connection
+    console.error("Connecting to SSH server...");
     await sshManager.connect();
+    console.error("SSH connection established");
   } catch (error) {
     console.error(`Warning: Could not establish initial SSH connection: ${error instanceof Error ? error.message : String(error)}`);
     console.error("Server will attempt to connect when first command is executed");
   }
 
-  // Create MCP server
-  const server = new McpServer({
-    name: "ssh-unraid-server",
-    version: "1.1.2",
-  });
+  // Initialize platform registry
+  console.error("Initializing platform registry...");
+  initializePlatforms();
 
   // Create SSH executor adapter for tool modules
   // Converts SSHConnectionManager's full response to simple stdout string
   const sshExecutor = async (command: string): Promise<string> => {
     const result = await sshManager.executeCommand(command);
     if (result.exitCode !== 0 && result.stderr) {
-      throw new Error(result.stderr);
+      const cmdPreview = command.length > 100 ? command.substring(0, 100) + "..." : command;
+      throw new Error(`Command failed (exit ${result.exitCode}): ${cmdPreview}\n${result.stderr}`);
     }
     return result.stdout;
   };
 
-  // Register all tools (12 consolidated mega-tools)
-  registerDockerTools(server, sshExecutor);
-  registerSystemTools(server, sshExecutor);
-  registerUnraidTools(server, sshExecutor);
-  registerMonitoringTools(server, sshExecutor);
-  registerVMTools(server, sshExecutor);
-  registerContainerTopologyTools(server, sshExecutor);
-  registerPluginConfigTools(server, sshExecutor);
-  registerPerformanceTools(server, sshExecutor);
-  registerSecurityTools(server, sshExecutor);
-  registerLogAnalysisTools(server, sshExecutor);
-  registerResourceManagementTools(server, sshExecutor);
-  registerHealthDiagnosticsTools(server, sshExecutor);
+  // Detect platform
+  console.error("Detecting platform...");
+  let detectedPlatform: Platform;
+  try {
+    detectedPlatform = await platformRegistry.detect(sshExecutor);
+    console.error(`Detected platform: ${detectedPlatform.displayName} (${detectedPlatform.id})`);
+  } catch (error) {
+    console.error(`Platform detection failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Falling back to generic Linux platform");
+    const fallback = platformRegistry.get("linux");
+    if (!fallback) {
+      throw new Error("Platform detection failed and no fallback platform available");
+    }
+    detectedPlatform = fallback;
+  }
+
+  // Create MCP server
+  console.error("Initializing MCP server...");
+  const server = new McpServer({
+    name: "mcp-ssh-sre",
+    version: "2.0.0",
+  });
+
+  // Load tools for detected platform
+  console.error("Loading tools for platform...");
+  loadTools(server, sshExecutor, detectedPlatform);
+  console.error("All MCP tools registered");
 
   // Handle graceful shutdown
   process.on("SIGINT", async () => {
@@ -80,7 +85,8 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  console.error("SSH Unraid MCP Server running on stdio");
+  console.error(`MCP SSH SRE Server (stdio) ready`);
+  console.error(`Platform: ${detectedPlatform.displayName} (${detectedPlatform.id})`);
 }
 
 // Start the server only if not in test environment

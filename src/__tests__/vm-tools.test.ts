@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerVMTools } from '../vm-tools.js';
+import { registerVMTools } from '../tools/core/vm-tools.js';
 
 describe('VM Tools', () => {
   let mockServer: any;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerUnraidTools } from '../unraid-tools.js';
+import { registerUnraidArrayTools as registerUnraidTools } from '../platforms/unraid/array-tools.js';
 
 describe('Unraid Tools', () => {
   let mockServer: any;

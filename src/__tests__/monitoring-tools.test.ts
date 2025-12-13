@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerMonitoringTools } from '../monitoring-tools.js';
+import { registerMonitoringTools } from '../tools/core/monitoring-tools.js';
 
 describe('Monitoring Tools', () => {
   let mockServer: any;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerDockerTools } from '../docker-tools.js';
+import { registerDockerTools } from '../tools/core/docker-tools.js';
 
 describe('Docker Tools', () => {
   let mockServer: any;
