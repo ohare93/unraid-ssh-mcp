@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerResourceManagementTools } from '../resource-management-tools.js';
+import { registerResourceManagementTools } from '../tools/core/resource-management-tools.js';
 
 describe('Resource Management Tools', () => {
   let mockServer: any;

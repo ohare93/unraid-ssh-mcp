@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerSecurityTools } from '../security-tools.js';
+import { registerSecurityTools } from '../tools/core/security-tools.js';
 
 describe('Security Tools', () => {
   let mockServer: any;

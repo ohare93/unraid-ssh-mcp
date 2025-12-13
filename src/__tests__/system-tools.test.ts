@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerSystemTools } from '../system-tools.js';
+import { registerSystemTools } from '../tools/core/system-tools.js';
 
 describe('System Tools', () => {
   let mockServer: any;

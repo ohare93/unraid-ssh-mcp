@@ -1,4 +1,4 @@
-# MCP SSH Unraid - Project Instructions
+# MCP SSH SRE - Project Instructions
 
 ## User Expectations
 
@@ -58,4 +58,14 @@ When testing the deployed MCP server, use the MCP tools (e.g., `mcp__unraid-ssh_
 
 ## Filter System
 
-All 79 tools support comprehensive output filtering. Filters are defined in `src/filters.ts` and applied via `...outputFiltersSchema.shape` pattern. When adding new tools, always include filter support.
+All 12 tool modules (with 79+ total actions) support comprehensive output filtering. Filters are defined in `src/filters.ts` and applied via `...outputFiltersSchema.shape` pattern. When adding new tools, always include filter support.
+
+## Platform Architecture
+
+The server uses a platform abstraction layer:
+- **Core tools** (`src/tools/core/`): 10 modules, always loaded on any Linux system
+- **Platform-specific tools** (`src/platforms/*/`): Loaded based on auto-detection
+  - Unraid: 2 modules (array-tools, plugin-tools)
+  - Generic Linux: No extra modules (uses core only)
+
+Tool loading is handled by `src/tool-loader.ts` based on the detected platform.

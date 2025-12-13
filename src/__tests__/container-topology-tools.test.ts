@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerContainerTopologyTools } from '../container-topology-tools.js';
+import { registerContainerTopologyTools } from '../tools/core/container-topology-tools.js';
 
 describe('Container Topology Tools', () => {
   let mockServer: any;

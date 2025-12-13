@@ -4,18 +4,8 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import "dotenv/config";
 import { SSHConnectionManager } from "./ssh-manager.js";
-import { registerDockerTools } from "./docker-tools.js";
-import { registerSystemTools } from "./system-tools.js";
-import { registerUnraidTools } from "./unraid-tools.js";
-import { registerMonitoringTools } from "./monitoring-tools.js";
-import { registerVMTools } from "./vm-tools.js";
-import { registerContainerTopologyTools } from "./container-topology-tools.js";
-import { registerPluginConfigTools } from "./plugin-config-tools.js";
-import { registerPerformanceTools } from "./performance-tools.js";
-import { registerSecurityTools } from "./security-tools.js";
-import { registerLogAnalysisTools } from "./log-analysis-tools.js";
-import { registerResourceManagementTools } from "./resource-management-tools.js";
-import { registerHealthDiagnosticsTools } from "./health-diagnostics-tools.js";
+import { initializePlatforms, platformRegistry, Platform } from "./platforms/index.js";
+import { loadTools } from "./tool-loader.js";
 import { authenticateRequest } from './middleware/auth.js';
 import crypto from "crypto";
 
@@ -130,35 +120,46 @@ async function main() {
     log.warn("Server will attempt to connect when first command is executed");
   }
 
-  // Create MCP server (shared across all requests)
-  log.info("Initializing MCP server...");
-  const server = new McpServer({
-    name: "ssh-unraid-server-http",
-    version: "1.1.2",
-  });
+  // Initialize platform registry
+  log.info("Initializing platform registry...");
+  initializePlatforms();
 
   // Create SSH executor adapter for tool modules
   const sshExecutor = async (command: string): Promise<string> => {
     const result = await sshManager.executeCommand(command);
     if (result.exitCode !== 0 && result.stderr) {
-      throw new Error(result.stderr);
+      const cmdPreview = command.length > 100 ? command.substring(0, 100) + "..." : command;
+      throw new Error(`Command failed (exit ${result.exitCode}): ${cmdPreview}\n${result.stderr}`);
     }
     return result.stdout;
   };
 
-  // Register all tools
-  registerDockerTools(server, sshExecutor);
-  registerSystemTools(server, sshExecutor);
-  registerUnraidTools(server, sshExecutor);
-  registerMonitoringTools(server, sshExecutor);
-  registerVMTools(server, sshExecutor);
-  registerContainerTopologyTools(server, sshExecutor);
-  registerPluginConfigTools(server, sshExecutor);
-  registerPerformanceTools(server, sshExecutor);
-  registerSecurityTools(server, sshExecutor);
-  registerLogAnalysisTools(server, sshExecutor);
-  registerResourceManagementTools(server, sshExecutor);
-  registerHealthDiagnosticsTools(server, sshExecutor);
+  // Detect platform
+  log.info("Detecting platform...");
+  let detectedPlatform: Platform;
+  try {
+    detectedPlatform = await platformRegistry.detect(sshExecutor);
+    log.success(`Detected platform: ${detectedPlatform.displayName} (${detectedPlatform.id})`);
+  } catch (error) {
+    log.error(`Platform detection failed: ${error instanceof Error ? error.message : String(error)}`);
+    log.warn("Falling back to generic Linux platform");
+    const fallback = platformRegistry.get("linux");
+    if (!fallback) {
+      throw new Error("Platform detection failed and no fallback platform available");
+    }
+    detectedPlatform = fallback;
+  }
+
+  // Create MCP server (shared across all requests)
+  log.info("Initializing MCP server...");
+  const server = new McpServer({
+    name: "mcp-ssh-sre",
+    version: "2.0.0",
+  });
+
+  // Load tools for detected platform
+  log.info("Loading tools for platform...");
+  loadTools(server, sshExecutor, detectedPlatform);
   log.success("All MCP tools registered");
 
   // ==========================================================================
@@ -321,10 +322,14 @@ async function main() {
     res.status(httpCode).json({
       status,
       ssh_connected: isSSHConnected,
-      server: "mcp-ssh-unraid",
-      version: "1.1.2",
+      server: "mcp-ssh-sre",
+      version: "2.0.0",
       transport: "http",
       oauth: "enabled",
+      platform: {
+        id: detectedPlatform.id,
+        name: detectedPlatform.displayName,
+      },
     });
   });
 
@@ -399,7 +404,8 @@ async function main() {
 
   // Start the server
   app.listen(port, () => {
-    log.success(`SSH Unraid MCP Server (HTTP + OAuth) listening on port ${port}`);
+    log.success(`MCP SSH SRE Server (HTTP + OAuth) listening on port ${port}`);
+    log.info(`Platform: ${detectedPlatform.displayName} (${detectedPlatform.id})`);
     log.info(`Health endpoint: http://localhost:${port}/health`);
     log.info(`MCP endpoint: http://localhost:${port}/mcp`);
     log.info(`OAuth discovery: http://localhost:${port}/.well-known/oauth-authorization-server/mcp`);

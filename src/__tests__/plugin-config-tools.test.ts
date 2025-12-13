@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerPluginConfigTools } from '../plugin-config-tools.js';
+import { registerUnraidPluginTools as registerPluginConfigTools } from '../platforms/unraid/plugin-tools.js';
 
 describe('Plugin Config Tools', () => {
   let mockServer: any;

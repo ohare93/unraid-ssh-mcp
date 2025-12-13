@@ -72,11 +72,13 @@ describe('OAuth Authentication Enforcement', () => {
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Server failed to start within timeout'));
-      }, 10000);
+      }, 30000); // Increased timeout for platform detection
 
+      let output = '';
       serverProcess.stderr?.on('data', (data: Buffer) => {
         const message = data.toString();
-        if (message.includes(`listening on port ${testPort}`)) {
+        output += message;
+        if (message.includes('Server ready!')) {
           clearTimeout(timeout);
           resolve();
         }
@@ -86,11 +88,18 @@ describe('OAuth Authentication Enforcement', () => {
         clearTimeout(timeout);
         reject(error);
       });
+
+      serverProcess.on('exit', (code) => {
+        if (code !== 0 && code !== null) {
+          clearTimeout(timeout);
+          reject(new Error(`Server exited with code ${code}: ${output}`));
+        }
+      });
     });
 
     // Complete OAuth flow to get valid credentials for testing
     await setupOAuthCredentials();
-  });
+  }, 35000); // beforeAll timeout
 
   afterAll(async () => {
     // Stop the server

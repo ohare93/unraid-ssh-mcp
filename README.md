@@ -1,6 +1,6 @@
-# MCP SSH Unraid
+# MCP SSH SRE
 
-A Model Context Protocol (MCP) server that provides secure, read-only SSH access to Unraid servers for debugging and monitoring through AI assistants like Claude.
+A Model Context Protocol (MCP) server that provides secure, read-only SSH access to Linux servers for debugging and monitoring through AI assistants like Claude. Originally built for Unraid, now supports multiple platforms with auto-detection.
 
 ## Why Use This?
 
@@ -42,7 +42,7 @@ Additionally, the API has a [known 32-bit integer overflow](https://github.com/d
 
 ### What SSH Enables
 
-With SSH, this project provides **79 specialized tools** that can:
+With SSH, this project provides **12 tool modules with 79+ actions** that can:
 
 - **Analyze Docker logs** - Search, filter, and correlate logs across all containers simultaneously
 - **Parse SMART data** - Detailed drive health analysis including temperature trends, error counts, and failure predictions
@@ -65,7 +65,7 @@ The Unraid API is great for basic status checks and container start/stop operati
 
 ## Features
 
-- **79 specialized tools** for comprehensive Unraid server management through natural language
+- **12 tool modules with 79+ actions** for comprehensive server management through natural language
 - **Dual transport modes** - Run via stdio (local) or HTTP/SSE (network-accessible)
 - **Read-only by design** - Zero risk of accidental system modifications
 - **Docker container management** - Inspect, logs, stats, environment variables, port mappings, network topology, and inter-container communication testing
