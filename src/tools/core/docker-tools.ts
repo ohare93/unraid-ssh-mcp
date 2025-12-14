@@ -61,6 +61,7 @@ export function registerDockerTools(
             let cmd = `docker logs ${args.container}`;
             if (args.dockerTail !== undefined) cmd += ` --tail ${args.dockerTail}`;
             if (args.dockerSince !== undefined) cmd += ` --since ${args.dockerSince}`;
+            cmd += " 2>&1"; // Capture both stdout and stderr
             cmd = applyFilters(cmd, args);
             const output = await sshExecutor(cmd);
             return { content: [{ type: "text", text: `Docker Logs - ${args.container}:\n\n${output}` }] };

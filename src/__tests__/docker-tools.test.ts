@@ -67,7 +67,7 @@ describe('Docker Tools', () => {
       mockSSHExecutor.mockResolvedValue('log line 1\nlog line 2');
       const tool = registeredTools.get('docker');
       const result = await tool.handler({ action: 'logs', container: 'test', dockerTail: 100 });
-      expect(mockSSHExecutor).toHaveBeenCalledWith('docker logs test --tail 100');
+      expect(mockSSHExecutor).toHaveBeenCalledWith('docker logs test --tail 100 2>&1');
     });
   });
 

@@ -154,7 +154,7 @@ async function main() {
   log.info("Initializing MCP server...");
   const server = new McpServer({
     name: "mcp-ssh-sre",
-    version: "2.0.0",
+    version: "2.0.1",
   });
 
   // Load tools for detected platform
@@ -323,7 +323,7 @@ async function main() {
       status,
       ssh_connected: isSSHConnected,
       server: "mcp-ssh-sre",
-      version: "2.0.0",
+      version: "2.0.1",
       transport: "http",
       oauth: "enabled",
       platform: {
